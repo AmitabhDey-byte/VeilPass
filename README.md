@@ -21,7 +21,9 @@ VeilPass is a privacy-first allowlist access dApp concept built for Midnight. A 
 <img width="1897" height="863" alt="Screenshot 2026-07-22 010239" src="https://github.com/user-attachments/assets/6be8b276-f114-4b07-b00b-987ac7cac7a1" />
 <img width="1896" height="867" alt="Screenshot 2026-07-22 010219" src="https://github.com/user-attachments/assets/846e6d04-345a-45d9-bc15-38f49a6dae48" />
 
+## CI CD Pipeline
 
+<img width="1916" height="862" alt="image" src="https://github.com/user-attachments/assets/0ee69a30-061b-46d7-9a39-4a1e372e5880" />
 
 
 ## Privacy model
