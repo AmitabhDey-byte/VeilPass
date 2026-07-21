@@ -41,6 +41,10 @@ npm run dev
 
 Open the local URL printed by the dev server. The console works as a product demo without a wallet: click **Generate proof**, review the private witness steps, and submit the simulated proof.
 
+### Veil assistant / Gemini (optional)
+
+The assistant is available from the floating **Ask Veil** button and works in demo mode without external credentials. To enable Gemini responses, copy `.env.example` to `.env.local`, add a `GEMINI_API_KEY`, and restart the dev server. The key is read only by the server route at `/api/chat`; it is never sent to the browser.
+
 ## Compact toolchain
 
 The contract is designed for the Midnight Compact toolchain and follows the `compact compile <source> <managed-output>` flow. With the Compact CLI installed:
