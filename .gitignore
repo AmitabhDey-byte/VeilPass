@@ -5,3 +5,4 @@ dist/
 managed/*
 !managed/README.md
 *.tsbuildinfo
+.env.local
