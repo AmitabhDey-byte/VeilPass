@@ -45,6 +45,10 @@ Open the local URL printed by the dev server. The console works as a product dem
 
 The assistant is available from the floating **Ask Veil** button and works in demo mode without external credentials. To enable Gemini responses, copy `.env.example` to `.env.local`, add a `GEMINI_API_KEY`, and restart the dev server. The key is read only by the server route at `/api/chat`; it is never sent to the browser.
 
+## Deploy to Vercel
+
+This repository now includes `vercel.json` for a standard Next.js deployment. Import the GitHub repository into Vercel, keep the Node.js version at 22, and add `GEMINI_API_KEY` under Project Settings → Environment Variables for Production, Preview, and Development. Vercel uses `next build` and the default `.next` output for this deployment path.
+
 ## Compact toolchain
 
 The contract is designed for the Midnight Compact toolchain and follows the `compact compile <source> <managed-output>` flow. With the Compact CLI installed:
