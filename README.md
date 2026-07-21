@@ -25,6 +25,13 @@ VeilPass is a privacy-first allowlist access dApp concept built for Midnight. A 
 
 <img width="1916" height="862" alt="image" src="https://github.com/user-attachments/assets/0ee69a30-061b-46d7-9a39-4a1e372e5880" />
 
+## Demo Video Link
+
+https://drive.google.com/file/d/1Ag_r7hJ1a4N1ZgL8JBBVugK-AmBTKjgt/view?usp=sharing
+
+## Live Website Link:
+
+https://veil-pass.vercel.app/
 
 ## Privacy model
 
