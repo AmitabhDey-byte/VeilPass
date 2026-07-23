@@ -4,6 +4,7 @@ dist/
 .next/
 .vinext/
 managed/*
-!managed/README.md
+!managed/
+!managed/**
 *.tsbuildinfo
 .env.local

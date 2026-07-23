@@ -15,7 +15,7 @@ test("server renders the VeilPass console", async () => {
   assert.match(html, /VeilPass/);
   assert.match(html, /Prove you belong/);
   assert.match(html, /Privacy model/);
-  assert.match(html, /addr_test1vz0/);
+  assert.match(html, /Deployment pending|addr_test1/);
 });
 
 test("privacy promise is visible in the rendered experience", async () => {

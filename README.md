@@ -65,12 +65,13 @@ npm run dev
 
 Open the local URL printed by the dev server. The console can be explored without a wallet, but the **Connect wallet** action uses the live Midnight DApp Connector API and Lace when the extension is available.
 
-### Connect Lace on Preview / Preprod
+### Connect Lace on Preview or 1AM on Preprod
 
-1. Install or enable a Lace build with Midnight testnet support.
-2. Run VeilPass in a browser profile where Lace is installed: `npm run dev` locally or open the Vercel deployment.
-3. Click **Connect wallet** and approve the request in Lace.
-4. VeilPass requests the `testnet` connector network, reads the wallet connection status and address, and displays the address plus the network ID returned by Lace.
+1. Install or enable Lace for Preview, or 1AM for Preprod.
+2. Set `NEXT_PUBLIC_MIDNIGHT_NETWORK_ID` to `preview` or `preprod`, and set `NEXT_PUBLIC_MIDNIGHT_WALLET` to `lace` or `1am`.
+3. Run VeilPass in that browser profile: `npm run dev` locally or open the Vercel deployment.
+4. Click **Connect wallet** and approve the request in the selected wallet.
+5. VeilPass reads the wallet connection status and address, then displays the network ID returned by the wallet.
 
 The current **Generate proof** button demonstrates the product flow after a real wallet connection. The next integration step is to replace `finishProof` with the generated Compact contract API and deployed contract address.
 
@@ -87,10 +88,10 @@ This repository now includes `vercel.json` for a standard Next.js deployment. Im
 The contract is designed for the Midnight Compact toolchain and follows the `compact compile <source> <managed-output>` flow. With the Compact CLI installed:
 
 ```bash
-compact compile contracts/veil-allowlist.compact managed
+compact compile contracts/veil-allowlist.compact managed/veil-allowlist
 ```
 
-The generated `managed/` directory is intentionally ignored until compilation is run in a configured Midnight environment. Do not hand-edit generated circuit or key files.
+The generated `managed/` directory is part of the submission. A successful compile creates the contract bindings plus `compiler/`, `contract/`, `keys/`, and `zkir/` artifacts under `managed/veil-allowlist/`. Commit that compiler output after running the command; do not hand-edit generated circuit or key files.
 
 ## Test
 
@@ -100,12 +101,12 @@ npm test
 
 ## Deployment record
 
-- Network: Preview / Preprod
 - Contract: `veil-allowlist.compact`
-- Demo address: `addr_test1vz0…3a8f92c`
-- Managed circuits: 3
+- Preview contract address: **to be replaced with the address returned by the Preview deployment command**
+- Preprod contract address: **to be replaced with the address returned by the Preprod deployment command**
+- Managed output: `managed/veil-allowlist/`
 
-The UI shows this address as a visible contract record. Replace it with the real deployment address after running the Midnight deployment flow from a configured wallet.
+Do not submit a truncated or invented address. After deploying with a funded Lace or 1AM wallet, replace both bold values with the complete address printed by the deployment script and record the exact network beside each one.
 
 ## Idea status
 

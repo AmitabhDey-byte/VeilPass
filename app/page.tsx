@@ -33,16 +33,19 @@ const credentials = [
   { name: "Eligibility score", issuer: "Private issuer", status: "Shielded", updated: "Never disclosed", icon: "◌" },
 ] as const;
 
-const MIDNIGHT_NETWORK_ID = "testnet";
+const MIDNIGHT_NETWORK_ID = process.env.NEXT_PUBLIC_MIDNIGHT_NETWORK_ID || "preprod";
+const MIDNIGHT_WALLET_HINT = process.env.NEXT_PUBLIC_MIDNIGHT_WALLET || (MIDNIGHT_NETWORK_ID === "preview" ? "lace" : "1am");
+const MIDNIGHT_CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_MIDNIGHT_CONTRACT_ADDRESS || "Deployment pending";
 
 function shortAddress(address: string) {
   if (address.length <= 18) return address;
   return `${address.slice(0, 9)}…${address.slice(-7)}`;
 }
 
-function findLaceWallet() {
+function findMidnightWallet() {
   const injected = Object.entries(window.midnight ?? {}) as Array<[string, InitialAPI]>;
-  return injected.find(([, wallet]) => /lace/i.test(wallet.name) || /lace/i.test(wallet.rdns));
+  return injected.find(([, wallet]) => new RegExp(MIDNIGHT_WALLET_HINT, "i").test(wallet.name) || new RegExp(MIDNIGHT_WALLET_HINT, "i").test(wallet.rdns))
+    || injected.find(([, wallet]) => /lace|1am/i.test(wallet.name) || /lace|1am/i.test(wallet.rdns));
 }
 
 function localAnswer(message: string) {
@@ -100,10 +103,10 @@ export default function Home() {
     setWalletBusy(true);
     setWalletError("");
     try {
-      const lace = findLaceWallet();
-      if (!lace) throw new Error("Lace was not detected. Install or enable the Lace Midnight extension.");
+      const wallet = findMidnightWallet();
+      if (!wallet) throw new Error(`No Midnight wallet was detected. Install or enable ${MIDNIGHT_WALLET_HINT} for ${MIDNIGHT_NETWORK_ID}.`);
 
-      const api = await lace[1].connect(MIDNIGHT_NETWORK_ID);
+      const api = await wallet[1].connect(MIDNIGHT_NETWORK_ID);
       const [status, unshielded, shielded, configuration] = await Promise.all([
         api.getConnectionStatus(),
         api.getUnshieldedAddress(),
@@ -115,14 +118,14 @@ export default function Home() {
       const address = unshielded.unshieldedAddress || shielded.shieldedAddress;
       setWalletApi(api);
       setWalletAddress(address);
-      setWalletName(lace[1].name || "Lace");
+      setWalletName(wallet[1].name || MIDNIGHT_WALLET_HINT);
       setWalletNetwork(configuration.networkId || status.networkId);
       setConnected(true);
-      setNotice(`Connected to ${lace[1].name || "Lace"}`);
+      setNotice(`Connected to ${wallet[1].name || MIDNIGHT_WALLET_HINT}`);
       window.setTimeout(() => setNotice(""), 2200);
       return true;
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Lace connection was rejected.";
+      const message = error instanceof Error ? error.message : "Midnight wallet connection was rejected.";
       setWalletError(message);
       setNotice("Lace connection failed");
       window.setTimeout(() => setNotice(""), 2200);
@@ -185,5 +188,5 @@ export default function Home() {
 }
 
 function PrivacyCard({ onOpen, onCopy, copied }: { onOpen: () => void; onCopy: () => void; copied: boolean }) {
-  return <aside className="right-column"><SectionHeading kicker="SELECTIVE DISCLOSURE" title="Privacy model" action={<button className="round-help" onClick={onOpen} type="button" aria-label="Learn about selective disclosure">?</button>} /><div className="privacy-panel"><div className="privacy-intro"><div className="privacy-orb">◌</div><p>Every proof has two layers. The network gets a yes or no. Your story stays with you.</p></div><div className="visibility-block public"><div className="visibility-title"><span className="visibility-mark">◎</span><strong>Publicly visible</strong><span className="visibility-count">02</span></div><div className="visibility-row"><span>Eligibility commitment</span><span className="mini-tag">hashed</span></div><div className="visibility-row"><span>Proof validity</span><span className="mini-tag">yes / no</span></div></div><div className="visibility-block private"><div className="visibility-title"><span className="visibility-mark">⌑</span><strong>Kept private</strong><span className="visibility-count">04</span></div><div className="visibility-row"><span>Your name</span><span className="mini-tag private-tag">hidden</span></div><div className="visibility-row"><span>Credential source</span><span className="mini-tag private-tag">hidden</span></div><div className="visibility-row"><span>Underlying value</span><span className="mini-tag private-tag">hidden</span></div></div><button className="learn-button" onClick={onOpen} type="button">Explore the privacy model <span>↗</span></button></div><div className="contract-card"><div className="contract-head"><span className="section-kicker">LIVE CONTRACT</span><span className="network-pill"><span className="live-dot" />Preview</span></div><div className="contract-name">veil-allowlist.compact</div><div className="contract-address" onClick={onCopy} role="button" tabIndex={0} title="Copy contract address">{copied ? "Copied to clipboard" : "addr_test1vz0…3a8f92c"}<span>{copied ? "✓" : "⧉"}</span></div><div className="contract-meta"><span>Managed circuits <strong>3</strong></span><span>Last deploy <strong>4d ago</strong></span></div></div></aside>;
+  return <aside className="right-column"><SectionHeading kicker="SELECTIVE DISCLOSURE" title="Privacy model" action={<button className="round-help" onClick={onOpen} type="button" aria-label="Learn about selective disclosure">?</button>} /><div className="privacy-panel"><div className="privacy-intro"><div className="privacy-orb">◌</div><p>Every proof has two layers. The network gets a yes or no. Your story stays with you.</p></div><div className="visibility-block public"><div className="visibility-title"><span className="visibility-mark">◎</span><strong>Publicly visible</strong><span className="visibility-count">02</span></div><div className="visibility-row"><span>Eligibility commitment</span><span className="mini-tag">hashed</span></div><div className="visibility-row"><span>Proof validity</span><span className="mini-tag">yes / no</span></div></div><div className="visibility-block private"><div className="visibility-title"><span className="visibility-mark">⌑</span><strong>Kept private</strong><span className="visibility-count">04</span></div><div className="visibility-row"><span>Your name</span><span className="mini-tag private-tag">hidden</span></div><div className="visibility-row"><span>Credential source</span><span className="mini-tag private-tag">hidden</span></div><div className="visibility-row"><span>Underlying value</span><span className="mini-tag private-tag">hidden</span></div></div><button className="learn-button" onClick={onOpen} type="button">Explore the privacy model <span>↗</span></button></div><div className="contract-card"><div className="contract-head"><span className="section-kicker">LIVE CONTRACT</span><span className="network-pill"><span className="live-dot" />{MIDNIGHT_NETWORK_ID}</span></div><div className="contract-name">veil-allowlist.compact</div><div className="contract-address" onClick={onCopy} role="button" tabIndex={0} title="Copy contract address">{copied ? "Copied to clipboard" : MIDNIGHT_CONTRACT_ADDRESS}<span>{copied ? "✓" : "⧉"}</span></div><div className="contract-meta"><span>Managed circuits <strong>2</strong></span><span>Deployment <strong>pending</strong></span></div></div></aside>;
 }

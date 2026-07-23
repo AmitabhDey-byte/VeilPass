@@ -18,6 +18,19 @@ jobs:
       - run: npm run build
       - run: node --test tests/rendered-html.test.mjs
       - run: npm run check:compact-source
-      # Run this step in the Midnight toolchain image once the Compact CLI is available.
-      - name: Check Compact source
-        run: test -f contracts/veil-allowlist.compact
+      - name: Install Compact CLI
+        run: |
+          curl --proto '=https' --tlsv1.2 -LsSf \
+            https://github.com/midnightntwrk/compact/releases/latest/download/compact-installer.sh | sh
+          echo "$HOME/.compact/bin" >> "$GITHUB_PATH"
+          compact update 0.31.0
+
+      - name: Compile Compact contract
+        run: compact compile contracts/veil-allowlist.compact managed/veil-allowlist
+
+      - name: Verify generated contract artifacts
+        run: |
+          test -d managed/veil-allowlist/compiler
+          test -d managed/veil-allowlist/contract
+          test -d managed/veil-allowlist/keys
+          test -d managed/veil-allowlist/zkir
