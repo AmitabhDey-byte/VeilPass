@@ -39,7 +39,16 @@ npm ci
 npm run dev
 ```
 
-Open the local URL printed by the dev server. The console works as a product demo without a wallet: click **Generate proof**, review the private witness steps, and submit the simulated proof.
+Open the local URL printed by the dev server. The console can be explored without a wallet, but the **Connect wallet** action uses the live Midnight DApp Connector API and Lace when the extension is available.
+
+### Connect Lace on Preview / Preprod
+
+1. Install or enable a Lace build with Midnight testnet support.
+2. Run VeilPass in a browser profile where Lace is installed: `npm run dev` locally or open the Vercel deployment.
+3. Click **Connect wallet** and approve the request in Lace.
+4. VeilPass requests the `testnet` connector network, reads the wallet connection status and address, and displays the address plus the network ID returned by Lace.
+
+The current **Generate proof** button demonstrates the product flow after a real wallet connection. The next integration step is to replace `finishProof` with the generated Compact contract API and deployed contract address.
 
 ### Veil assistant / Gemini (optional)
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import type { ConnectedAPI, InitialAPI } from "@midnight-ntwrk/dapp-connector-api";
 
 type View = "Overview" | "Access passes" | "Credentials" | "Activity";
 type ChatMessage = { role: "user" | "assistant"; text: string };
@@ -32,6 +33,18 @@ const credentials = [
   { name: "Eligibility score", issuer: "Private issuer", status: "Shielded", updated: "Never disclosed", icon: "◌" },
 ] as const;
 
+const MIDNIGHT_NETWORK_ID = "testnet";
+
+function shortAddress(address: string) {
+  if (address.length <= 18) return address;
+  return `${address.slice(0, 9)}…${address.slice(-7)}`;
+}
+
+function findLaceWallet() {
+  const injected = Object.entries(window.midnight ?? {}) as Array<[string, InitialAPI]>;
+  return injected.find(([, wallet]) => /lace/i.test(wallet.name) || /lace/i.test(wallet.rdns));
+}
+
 function localAnswer(message: string) {
   const prompt = message.toLowerCase();
   if (prompt.includes("credential")) return "Your credentials stay in the private witness layer. VeilPass uses them to build a proof, but does not publish the name, issuer, or underlying value.";
@@ -53,6 +66,12 @@ function ActivityTable({ compact = false }: { compact?: boolean }) {
 export default function Home() {
   const [activeNav, setActiveNav] = useState<View>("Overview");
   const [connected, setConnected] = useState(false);
+  const [walletAddress, setWalletAddress] = useState("");
+  const [walletName, setWalletName] = useState("");
+  const [walletNetwork, setWalletNetwork] = useState("");
+  const [walletBusy, setWalletBusy] = useState(false);
+  const [walletError, setWalletError] = useState("");
+  const [, setWalletApi] = useState<ConnectedAPI | null>(null);
   const [verified, setVerified] = useState(false);
   const [showProof, setShowProof] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
@@ -65,8 +84,57 @@ export default function Home() {
     { role: "assistant", text: "Hey — I’m Veil. Ask me how private proofs, credentials, or access passes work." },
   ]);
 
-  function connectWallet() { setConnected(true); setNotice("Wallet connected in demo mode"); window.setTimeout(() => setNotice(""), 2200); }
-  function generateProof() { if (!connected) connectWallet(); setShowProof(true); }
+  async function connectWallet() {
+    if (connected) {
+      setWalletApi(null);
+      setWalletAddress("");
+      setWalletName("");
+      setWalletNetwork("");
+      setWalletError("");
+      setConnected(false);
+      setNotice("Wallet disconnected");
+      window.setTimeout(() => setNotice(""), 2200);
+      return false;
+    }
+
+    setWalletBusy(true);
+    setWalletError("");
+    try {
+      const lace = findLaceWallet();
+      if (!lace) throw new Error("Lace was not detected. Install or enable the Lace Midnight extension.");
+
+      const api = await lace[1].connect(MIDNIGHT_NETWORK_ID);
+      const [status, unshielded, shielded, configuration] = await Promise.all([
+        api.getConnectionStatus(),
+        api.getUnshieldedAddress(),
+        api.getShieldedAddresses(),
+        api.getConfiguration(),
+      ]);
+
+      if (status.status !== "connected") throw new Error("Lace did not establish a Midnight connection.");
+      const address = unshielded.unshieldedAddress || shielded.shieldedAddress;
+      setWalletApi(api);
+      setWalletAddress(address);
+      setWalletName(lace[1].name || "Lace");
+      setWalletNetwork(configuration.networkId || status.networkId);
+      setConnected(true);
+      setNotice(`Connected to ${lace[1].name || "Lace"}`);
+      window.setTimeout(() => setNotice(""), 2200);
+      return true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Lace connection was rejected.";
+      setWalletError(message);
+      setNotice("Lace connection failed");
+      window.setTimeout(() => setNotice(""), 2200);
+      return false;
+    } finally {
+      setWalletBusy(false);
+    }
+  }
+  async function generateProof() {
+    const ready = connected || await connectWallet();
+    if (ready) setShowProof(true);
+  }
   function finishProof() { setVerified(true); setShowProof(false); setActiveNav("Overview"); }
   function copyAddress() { setCopied(true); window.setTimeout(() => setCopied(false), 1800); }
   function openView(view: View) { setActiveNav(view); window.scrollTo({ top: 0, behavior: "smooth" }); }
@@ -101,6 +169,9 @@ export default function Home() {
   const activityView = <section className="view-page"><div className="view-hero"><div><div className="eyebrow"><span className="eyebrow-dot" /> PUBLIC LEDGER</div><h1>Activity</h1><p>A readable trail of commitments and proof results — with no identity trail attached.</p></div><div className="activity-filter"><button className="filter-active" type="button">All activity</button><button type="button">Proofs</button><button type="button">Passes</button></div></div><div className="activity-summary"><div><span className="stat-label">Total proofs</span><strong>1,284</strong></div><div><span className="stat-label">Verified</span><strong className="green-number">1,201</strong></div><div><span className="stat-label">Public data points</span><strong>02 <small>per proof</small></strong></div><div><span className="stat-label">Private data points</span><strong className="cyan-number">04 <small>shielded</small></strong></div></div><SectionHeading kicker="TRANSACTION HISTORY" title="Every public event" action={<span className="chain-chip"><span className="live-dot" /> Synced just now</span>} /><ActivityTable /><div className="wide-info-panel small-info"><div className="info-icon">◌</div><div><span className="section-kicker">OBSERVER VIEW</span><h2>Transparent enough to verify. Private enough to trust.</h2><p>Public activity proves the system is working. It does not reveal who is behind a commitment.</p></div></div></section>;
 
   return <div className="app-shell">
+    {walletBusy && <div className="wallet-status-banner" role="status"><span className="live-dot" /><strong>Connecting Lace…</strong><span>Approve the request in your wallet</span></div>}
+    {connected && !walletBusy && <div className="wallet-status-banner" role="status"><span className="live-dot" /><strong>{walletName || "Lace"} connected</strong><span>{shortAddress(walletAddress)}</span><small>{walletNetwork || MIDNIGHT_NETWORK_ID}</small></div>}
+    {walletError && <div className="wallet-status-banner error" role="alert"><strong>Lace connection unavailable</strong><span>{walletError}</span></div>}
     <aside className="sidebar"><div className="brand-lockup"><div className="brand-mark" aria-hidden="true"><span /></div><div><div className="brand-name">VeilPass</div><div className="brand-meta">MIDNIGHT / PREPROD</div></div></div><div className="workspace-label">Workspace</div><nav className="primary-nav" aria-label="Primary navigation">{navItems.map(([label, icon]) => <button className={`nav-item ${activeNav === label ? "active" : ""}`} key={label} onClick={() => openView(label)} type="button"><span className="nav-icon" aria-hidden="true">{icon}</span><span>{label}</span>{label === "Access passes" && <span className="nav-count">04</span>}</button>)}</nav><div className="sidebar-rule" /><div className="workspace-label">Learn</div><nav className="primary-nav" aria-label="Learn navigation"><button className="nav-item" type="button" onClick={() => setShowPrivacy(true)}><span className="nav-icon" aria-hidden="true">?</span><span>How privacy works</span></button><button className="nav-item" type="button" onClick={() => setShowAssistant(true)}><span className="nav-icon" aria-hidden="true">✦</span><span>Ask Veil assistant</span></button><a className="nav-item" href="https://docs.midnight.network/" target="_blank" rel="noreferrer"><span className="nav-icon" aria-hidden="true">↗</span><span>Midnight docs</span></a></nav><div className="sidebar-bottom"><div className="network-card"><div className="network-topline"><span className="live-dot" /> Network live</div><div className="network-name">Preview / Preprod</div><div className="network-sub">Block <span>1,284,902</span></div></div><div className="user-row"><div className="avatar">VP</div><div className="user-copy"><strong>your wallet</strong><span>{connected ? "Connected" : "Not connected"}</span></div><button className="more-button" type="button" aria-label="Open wallet menu">•••</button></div></div></aside>
     <main className="main-content"><header className="topbar"><div className="breadcrumb"><span>Workspace</span><b>/</b><strong>{activeNav}</strong></div><div className="topbar-actions"><button className="icon-button" type="button" aria-label="Open assistant" onClick={() => setShowAssistant(true)}>✦<span className="notification-dot" /></button><button className={`wallet-button ${connected ? "connected" : ""}`} onClick={connectWallet} type="button"><span className="wallet-orb" />{connected ? "mn1…91c" : "Connect wallet"}</button></div></header><div className="page-content">{activeNav === "Overview" ? overview : activeNav === "Access passes" ? passesView : activeNav === "Credentials" ? credentialsView : activityView}</div><footer className="site-footer"><span>VEILPASS <i>·</i> A MIDNIGHT DEMO</span><span>Open-source prototype <b>↗</b></span></footer></main>
 
