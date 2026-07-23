@@ -9,7 +9,7 @@ witness private_credential_commitment(): Bytes<32>;
 witness private_is_eligible(): Boolean;
 
 export ledger allowlist_root: Bytes<32>;
-export ledger verified_passes: Uint<64>;
+export ledger verified_passes: Counter;
 
 export circuit register_allowlist_root(root: Bytes<32>): [] {
   allowlist_root = disclose(root);
@@ -17,8 +17,8 @@ export circuit register_allowlist_root(root: Bytes<32>): [] {
 
 export circuit prove_access(): [] {
   const eligible = private_is_eligible();
-  assert(eligible);
+  assert(eligible, "Private eligibility proof failed");
   const commitment = private_credential_commitment();
-  assert(commitment == allowlist_root);
-  verified_passes = verified_passes + 1;
+  assert(commitment == allowlist_root, "Credential commitment is not on the allowlist");
+  verified_passes.increment(1);
 }

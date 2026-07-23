@@ -85,13 +85,44 @@ This repository now includes `vercel.json` for a standard Next.js deployment. Im
 
 ## Compact toolchain
 
-The contract is designed for the Midnight Compact toolchain and follows the `compact compile <source> <managed-output>` flow. With the Compact CLI installed:
+The contract is designed for the Midnight Compact toolchain and follows the `compact compile <source> <managed-output>` flow.
+
+### Windows / PowerShell warning
+
+PowerShell resolves `compact` to the Windows file-compression utility at `C:\Windows\System32\compact.exe`. Its output starts with `Listing ...` and does **not** compile Compact contracts. Midnight's compiler is a Linux toolchain, so use Docker Desktop with Linux containers, WSL2 Ubuntu, or Linux/macOS. [Midnight's documentation](https://docs.midnight.network/getting-started/installation) recommends WSL for native Windows development.
+
+From a WSL2 Ubuntu terminal, run:
 
 ```bash
+curl --proto '=https' --tlsv1.2 -LsSf \
+  https://github.com/midnightntwrk/compact/releases/latest/download/compact-installer.sh | sh
+export PATH="$HOME/.compact/bin:$PATH"
+compact update 0.31.0
+cd /mnt/d/Midnight-main
+command -v compact
+compact --version
 compact compile contracts/veil-allowlist.compact managed/veil-allowlist
 ```
 
-The generated `managed/` directory is part of the submission. A successful compile creates the contract bindings plus `compiler/`, `contract/`, `keys/`, and `zkir/` artifacts under `managed/veil-allowlist/`. Commit that compiler output after running the command; do not hand-edit generated circuit or key files.
+`command -v compact` must point into your WSL home directory, not `C:\Windows\System32\compact.exe`. A successful compile creates the contract bindings plus `compiler/`, `contract/`, `keys/`, and `zkir/` artifacts under `managed/veil-allowlist/`. Commit that compiler output after running the command; do not hand-edit generated circuit or key files.
+
+### Windows without WSL2: Docker Desktop
+
+If you do not want WSL2, run the Linux compiler inside Docker Desktop. Use Docker Desktop with **Linux containers** and the **Hyper-V backend**; `docker version` should show a Linux server. From PowerShell in the repository root:
+
+```powershell
+$repo = (Get-Location).Path
+$cmd = 'apk add --no-cache bash curl ca-certificates; curl --proto ''=https'' --tlsv1.2 -LsSf https://github.com/midnightntwrk/compact/releases/latest/download/compact-installer.sh | sh; export PATH="$HOME/.compact/bin:$PATH"; compact update 0.31.0; compact compile contracts/veil-allowlist.compact managed/veil-allowlist'
+docker run --rm --pull always -v "${repo}:/workspace" -w /workspace alpine:3.22 sh -lc $cmd
+```
+
+This Docker command produces the same `managed/veil-allowlist/` output without installing the compiler natively on Windows. The project wrapper also uses this fallback:
+
+After Docker Desktop or the WSL toolchain is installed, the same compile can be launched from PowerShell with:
+
+```powershell
+npm run contracts:compile
+```
 
 ## Test
 

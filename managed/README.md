@@ -1,9 +1,9 @@
 # Managed contract artifacts
 
-This directory is reserved for the generated output of:
+This directory is reserved for the generated output of the Midnight Compact compiler:
 
 ```bash
 compact compile contracts/veil-allowlist.compact managed/veil-allowlist
 ```
 
-The generated compiler output is required for submission. It should contain `compiler/`, `contract/`, `keys/`, and `zkir/` after running the compile command. Never hand-edit those generated files.
+Run this from WSL2/Linux/macOS. On Windows PowerShell, `compact` means the built-in file-compression command and will only print `Listing ...`; it is not the Midnight compiler. The generated compiler output is required for submission and should contain `compiler/`, `contract/`, `keys/`, and `zkir/`. Never hand-edit those generated files.

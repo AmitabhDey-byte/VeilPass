@@ -12,6 +12,7 @@
     "test": "npm run build && node --test tests/rendered-html.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "check:compact-source": "node scripts/validate-compact-source.mjs",
+    "contracts:compile": "powershell -ExecutionPolicy Bypass -File scripts/compile-compact.ps1",
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
