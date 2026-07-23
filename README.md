@@ -2,145 +2,130 @@
 
 > Prove you belong. Keep your name.
 
-VeilPass is a privacy-first allowlist access dApp concept built for Midnight. A member can prove they are eligible for a private space without publishing their name, credential source, or underlying value. The interface makes the privacy boundary legible: public commitments and proof validity are visible; the witness remains local.
+VeilPass is a privacy-first allowlist-access dApp built for Midnight. A member can prove eligibility for a private space without publishing their name, credential issuer, or the value behind the claim.
 
 ## Product proposal
 
-**Private Allowlist Access** — VeilPass is a reusable access layer for invite-only communities, product betas, and events. A host publishes an allowlist commitment, while members keep their credential and secret locally. When a member requests entry, the Compact circuit verifies the private witness and reveals only a valid / invalid result. This gives organizers an auditable member count and revocable passes without turning the allowlist into a public identity directory.
+**Private Allowlist Access** — VeilPass is a reusable access layer for invite-only communities, product betas, and events. A host registers an allowlist commitment, while members keep their credential and secret private. The Compact circuit verifies the witness and reveals only a valid or invalid result. Organizers get an auditable access count without turning the allowlist into a public identity directory.
 
-## What is in this repository
+## Repository contents
 
-- `app/` — responsive VeilPass console with wallet connect, proof request, privacy model, activity, and live contract panels.
-- `contracts/veil-allowlist.compact` — first Compact contract with public ledger state, private witnesses, and deliberate `disclose()` use.
-- `tests/rendered-html.test.mjs` — three smoke tests covering server rendering, privacy copy, and required contract artifacts.
-- `.github/workflows/ci.yml` — build and test workflow for every push and pull request.
-## Screenshots
-
-<img width="1896" height="865" alt="Screenshot 2026-07-22 010331" src="https://github.com/user-attachments/assets/a47d0c50-1b9c-42f0-8280-529f28a1371a" />
-<img width="1896" height="868" alt="Screenshot 2026-07-22 010251" src="https://github.com/user-attachments/assets/3a45b64f-2b1a-4a3e-98ac-cfa8438c8ef0" />
-<img width="1897" height="863" alt="Screenshot 2026-07-22 010239" src="https://github.com/user-attachments/assets/6be8b276-f114-4b07-b00b-987ac7cac7a1" />
-<img width="1896" height="867" alt="Screenshot 2026-07-22 010219" src="https://github.com/user-attachments/assets/846e6d04-345a-45d9-bc15-38f49a6dae48" />
-
-## CI CD Pipeline
-
-<img width="1916" height="862" alt="image" src="https://github.com/user-attachments/assets/0ee69a30-061b-46d7-9a39-4a1e372e5880" />
-## Mobile Responsiveness
-
-<img width="360" height="800" alt="WhatsApp Image 2026-07-22 at 1 19 29 AM" src="https://github.com/user-attachments/assets/5cfd3453-c603-43f0-8248-421c1100fe39" />
-<img width="360" height="800" alt="WhatsApp Image 2026-07-22 at 1 19 29 AM (2)" src="https://github.com/user-attachments/assets/33915710-e2a7-497e-ace2-979540c8d276" />
-<img width="360" height="800" alt="WhatsApp Image 2026-07-22 at 1 19 29 AM (1)" src="https://github.com/user-attachments/assets/0ce630d4-e722-4f82-ab39-a0b94c666150" />
-
-
-## Demo Video Link
-
-https://drive.google.com/file/d/1Ag_r7hJ1a4N1ZgL8JBBVugK-AmBTKjgt/view?usp=sharing
-
-## Live Website Link:
-
-https://veil-pass.vercel.app/
+- `app/` — responsive VeilPass console with multi-page navigation, wallet connect, access views, credentials, activity, privacy model, and Gemini-ready assistant.
+- `contracts/veil-allowlist.compact` — Compact contract with public ledger state, private witnesses, and deliberate `disclose()` use.
+- `managed/veil-allowlist/` — generated contract binding, circuits, proving/verifying keys, and ZKIR output.
+- `public/keys/` and `public/zkir/` — browser-served proof assets for the connected wallet.
+- `tests/rendered-html.test.mjs` — three render and artifact smoke tests.
+- `.github/workflows/ci.yml` — build and test workflow on each push and pull request.
 
 ## Privacy model
 
 ### An observer can learn
 
-- The public allowlist commitment (a hash, not the credential).
+- The public allowlist commitment (a hash, not a credential).
 - Whether a submitted proof is valid.
-- The number of proofs accepted by the contract.
-- Public activity timestamps and transaction metadata.
+- The number of accepted proofs.
+- Public transaction metadata and timestamps.
 
 ### An observer cannot learn
 
-- The member’s name or wallet-to-identity mapping from the proof alone.
-- The credential source or the underlying eligibility value.
-- The private witness used to satisfy the circuit.
+- A member's name or wallet-to-identity mapping from the proof alone.
+- Credential issuer or underlying eligibility value.
+- The private witness that satisfied the circuit.
 
-`disclose()` is used only where a value intentionally crosses from private computation into the public ledger. In this prototype, the root is explicitly registered as public; the member witness is never disclosed.
+`disclose()` is used only to register the public allowlist root. The member credential commitment and eligibility boolean are private witnesses and are never disclosed.
 
-## Run locally
+## Local development
 
 ```bash
 npm ci
 npm run dev
 ```
 
-Open the local URL printed by the dev server. The console can be explored without a wallet, but the **Connect wallet** action uses the live Midnight DApp Connector API and Lace when the extension is available.
+The interface is explorable without a wallet. The **Connect wallet** action uses the Midnight DApp Connector API: use Lace on Preview or 1AM on Preprod.
 
-### Connect Lace on Preview or 1AM on Preprod
+Copy `.env.example` to `.env.local` for local configuration:
 
-1. Install or enable Lace for Preview, or 1AM for Preprod.
-2. Set `NEXT_PUBLIC_MIDNIGHT_NETWORK_ID` to `preview` or `preprod`, and set `NEXT_PUBLIC_MIDNIGHT_WALLET` to `lace` or `1am`.
-3. Run VeilPass in that browser profile: `npm run dev` locally or open the Vercel deployment.
-4. Click **Connect wallet** and approve the request in the selected wallet.
-5. VeilPass reads the wallet connection status and address, then displays the network ID returned by the wallet.
-
-The current **Generate proof** button demonstrates the product flow after a real wallet connection. The next integration step is to replace `finishProof` with the generated Compact contract API and deployed contract address.
-
-### Veil assistant / Gemini (optional)
-
-The assistant is available from the floating **Ask Veil** button and works in demo mode without external credentials. To enable Gemini responses, copy `.env.example` to `.env.local`, add a `GEMINI_API_KEY`, and restart the dev server. The key is read only by the server route at `/api/chat`; it is never sent to the browser.
-
-## Deploy to Vercel
-
-This repository now includes `vercel.json` for a standard Next.js deployment. Import the GitHub repository into Vercel, keep the Node.js version at 22, and add `GEMINI_API_KEY` under Project Settings → Environment Variables for Production, Preview, and Development. Vercel uses `next build` and the default `.next` output for this deployment path.
-
-## Compact toolchain
-
-The contract is designed for the Midnight Compact toolchain and follows the `compact compile <source> <managed-output>` flow.
-
-### Windows / PowerShell warning
-
-PowerShell resolves `compact` to the Windows file-compression utility at `C:\Windows\System32\compact.exe`. Its output starts with `Listing ...` and does **not** compile Compact contracts. Midnight's compiler is a Linux toolchain, so use Docker Desktop with Linux containers, WSL2 Ubuntu, or Linux/macOS. [Midnight's documentation](https://docs.midnight.network/getting-started/installation) recommends WSL for native Windows development.
-
-From a WSL2 Ubuntu terminal, run:
-
-```bash
-curl --proto '=https' --tlsv1.2 -LsSf \
-  https://github.com/midnightntwrk/compact/releases/latest/download/compact-installer.sh | sh
-export PATH="$HOME/.compact/bin:$PATH"
-compact update 0.31.0
-cd /mnt/d/Midnight-main
-command -v compact
-compact --version
-compact compile contracts/veil-allowlist.compact managed/veil-allowlist
+```text
+NEXT_PUBLIC_MIDNIGHT_NETWORK_ID=preprod
+NEXT_PUBLIC_MIDNIGHT_WALLET=1am
+NEXT_PUBLIC_MIDNIGHT_CONTRACT_ADDRESS=
+GEMINI_API_KEY=your_optional_server_side_key
 ```
 
-`command -v compact` must point into your WSL home directory, not `C:\Windows\System32\compact.exe`. A successful compile creates the contract bindings plus `compiler/`, `contract/`, `keys/`, and `zkir/` artifacts under `managed/veil-allowlist/`. Commit that compiler output after running the command; do not hand-edit generated circuit or key files.
+`GEMINI_API_KEY` is optional and is used only by the server chat route; it is never exposed in browser code.
 
-### Windows without WSL2: Docker Desktop
+## Compact toolchain and generated output
 
-If you do not want WSL2, run the Linux compiler inside Docker Desktop. Use Docker Desktop with **Linux containers** and the **Hyper-V backend**; `docker version` should show a Linux server. From PowerShell in the repository root:
-
-```powershell
-$repo = (Get-Location).Path
-$cmd = 'apk add --no-cache bash curl ca-certificates; curl --proto ''=https'' --tlsv1.2 -LsSf https://github.com/midnightntwrk/compact/releases/latest/download/compact-installer.sh | sh; export PATH="$HOME/.compact/bin:$PATH"; compact update 0.31.0; compact compile contracts/veil-allowlist.compact managed/veil-allowlist'
-docker run --rm --pull always -v "${repo}:/workspace" -w /workspace alpine:3.22 sh -lc $cmd
-```
-
-This Docker command produces the same `managed/veil-allowlist/` output without installing the compiler natively on Windows. The project wrapper also uses this fallback:
-
-After Docker Desktop or the WSL toolchain is installed, the same compile can be launched from PowerShell with:
+The contract compiles as:
 
 ```powershell
 npm run contracts:compile
 ```
 
-## Test
+Important: PowerShell's `C:\Windows\System32\compact.exe` is file compression, not Midnight Compact. Its output starts with `Listing ...`. A successful Midnight compile says `Compiling 2 circuits` and creates the checked-in `managed/veil-allowlist/compiler`, `contract`, `keys`, and `zkir` directories.
+
+No Docker is required to run this site, deploy it on Vercel, or deploy through 1AM using the already-generated artifacts. After modifying the Compact source, run the wrapper above; it also syncs keys and ZKIR into `public/` for browser proving. If the wrapper cannot find a Midnight compiler, use a supported Linux environment only to recompile the changed contract source.
+
+To re-sync browser assets without recompiling:
+
+```powershell
+npm run contracts:sync-browser-assets
+```
+
+## Test and CI
 
 ```bash
+npm run check:compact-source
+npm run lint
 npm test
 ```
+
+`npm test` runs the production build followed by three smoke tests. The GitHub Actions workflow runs the same build and test checks on every push and pull request.
+
+## Deploy on Vercel
+
+This app uses Vinext plus Nitro. `vercel.json` explicitly chooses Vercel's **Other** framework preset, runs `npm run build`, and Nitro emits Vercel Build Output API files in `.vercel/output`. This fixes the previous “`.output` was not found” failure caused by forcing a Next.js deployment.
+
+1. Import the repository in Vercel and use Node.js 22.
+2. Add the Preprod environment variables shown in `.env.example`: `NEXT_PUBLIC_MIDNIGHT_NETWORK_ID=preprod` and `NEXT_PUBLIC_MIDNIGHT_WALLET=1am`.
+3. Leave `NEXT_PUBLIC_MIDNIGHT_CONTRACT_ADDRESS` empty for the first deployment.
+4. Deploy the site.
+
+For a Vercel Preview deployment using Lace, set `NEXT_PUBLIC_MIDNIGHT_NETWORK_ID=preview` and `NEXT_PUBLIC_MIDNIGHT_WALLET=lace` in that environment.
+
+## Deploy the Compact contract without Docker
+
+Preprod + 1AM is the recommended no-Docker path.
+
+1. Run `npm run contracts:sync-browser-assets` once after compiling.
+2. Deploy the frontend on Vercel with the Preprod / 1AM variables above.
+3. Open the live site in the browser profile containing **1AM**, and switch 1AM to **Preprod**.
+4. Fund that wallet with Preprod tNIGHT and DUST using the network faucet shown in 1AM, or the [Preprod tNIGHT faucet](https://midnight-tmnight-preprod.nethermind.dev/).
+5. In VeilPass, select **Connect wallet**, approve the request, then select **Deploy with connected wallet** in the Live contract card.
+6. Keep the tab open while 1AM proves, balances, and submits the transaction. The app displays and copies the full contract address when finalization succeeds.
+7. Select **Generate proof** and then **Run private proof** to submit VeilPass's live `prove_access` circuit from the same wallet session.
+8. Paste the full address below and into Vercel as `NEXT_PUBLIC_MIDNIGHT_CONTRACT_ADDRESS`, then redeploy the frontend.
+
+The browser deployer uses the selected wallet's configured proof service where supplied, or the wallet's delegated proving provider. On Preview, Lace may require a configured local proof service; use Preprod + 1AM for the required Docker-free deployment.
+
+### Optional headless route
+
+`npm run contracts:deploy -- --network preprod` is an advanced terminal workflow. It requires an existing proof endpoint in `MIDNIGHT_PROOF_SERVER`, uses a separate local headless wallet, and is not required for the 1AM deployment above. Its local seed file is gitignored and must never be committed.
 
 ## Deployment record
 
 - Contract: `veil-allowlist.compact`
-- Preview contract address: **to be replaced with the address returned by the Preview deployment command**
-- Preprod contract address: **to be replaced with the address returned by the Preprod deployment command**
+- Preview contract address: pending deployment
+- Preprod contract address: pending deployment
 - Managed output: `managed/veil-allowlist/`
 
-Do not submit a truncated or invented address. After deploying with a funded Lace or 1AM wallet, replace both bold values with the complete address printed by the deployment script and record the exact network beside each one.
+Vercel hosts the frontend; it does not create a Midnight contract by itself. Do not replace either address with a shortened or invented value. Only insert the complete address shown after a successful wallet deployment.
 
-## Idea status
+## Submission links
+
+- Live demo: https://veil-pass.vercel.app/
+- Demo video: https://drive.google.com/file/d/1Ag_r7hJ1a4N1ZgL8JBBVugK-AmBTKjgt/view?usp=sharing
 
 Approved idea track: **Private Allowlist Access**.
 
-Built with [Midnight developer documentation](https://docs.midnight.network/) and the Compact language.
+Built with [Midnight developer documentation](https://docs.midnight.network/) and Compact.

@@ -3,8 +3,12 @@ dist/
 .wrangler/
 .next/
 .vinext/
+.output/
+.vercel/
 managed/*
 !managed/
 !managed/**
 *.tsbuildinfo
 .env.local
+.midnight-deployments.local.json
+.midnight-state.json
