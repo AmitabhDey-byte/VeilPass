@@ -14,6 +14,30 @@ VeilPass is a privacy-first allowlist access dApp concept built for Midnight. A 
 - `contracts/veil-allowlist.compact` — first Compact contract with public ledger state, private witnesses, and deliberate `disclose()` use.
 - `tests/rendered-html.test.mjs` — three smoke tests covering server rendering, privacy copy, and required contract artifacts.
 - `.github/workflows/ci.yml` — build and test workflow for every push and pull request.
+## Screenshots
+
+<img width="1896" height="865" alt="Screenshot 2026-07-22 010331" src="https://github.com/user-attachments/assets/a47d0c50-1b9c-42f0-8280-529f28a1371a" />
+<img width="1896" height="868" alt="Screenshot 2026-07-22 010251" src="https://github.com/user-attachments/assets/3a45b64f-2b1a-4a3e-98ac-cfa8438c8ef0" />
+<img width="1897" height="863" alt="Screenshot 2026-07-22 010239" src="https://github.com/user-attachments/assets/6be8b276-f114-4b07-b00b-987ac7cac7a1" />
+<img width="1896" height="867" alt="Screenshot 2026-07-22 010219" src="https://github.com/user-attachments/assets/846e6d04-345a-45d9-bc15-38f49a6dae48" />
+
+## CI CD Pipeline
+
+<img width="1916" height="862" alt="image" src="https://github.com/user-attachments/assets/0ee69a30-061b-46d7-9a39-4a1e372e5880" />
+## Mobile Responsiveness
+
+<img width="360" height="800" alt="WhatsApp Image 2026-07-22 at 1 19 29 AM" src="https://github.com/user-attachments/assets/5cfd3453-c603-43f0-8248-421c1100fe39" />
+<img width="360" height="800" alt="WhatsApp Image 2026-07-22 at 1 19 29 AM (2)" src="https://github.com/user-attachments/assets/33915710-e2a7-497e-ace2-979540c8d276" />
+<img width="360" height="800" alt="WhatsApp Image 2026-07-22 at 1 19 29 AM (1)" src="https://github.com/user-attachments/assets/0ce630d4-e722-4f82-ab39-a0b94c666150" />
+
+
+## Demo Video Link
+
+https://drive.google.com/file/d/1Ag_r7hJ1a4N1ZgL8JBBVugK-AmBTKjgt/view?usp=sharing
+
+## Live Website Link:
+
+https://veil-pass.vercel.app/
 
 ## Privacy model
 
