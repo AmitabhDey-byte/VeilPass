@@ -41,7 +41,7 @@ npm ci
 npm run dev
 ```
 
-The interface is explorable without a wallet. The **Connect wallet** action uses the Midnight DApp Connector API: use Lace on Preview or 1AM on Preprod.
+The interface is explorable without a wallet. The **Connect wallet** action uses the Midnight DApp Connector API with **1AM** on either Preview or Preprod. Use the in-app network toggle before connecting.
 
 Copy `.env.example` to `.env.local` for local configuration:
 
@@ -87,26 +87,26 @@ npm test
 This app uses Vinext plus Nitro. `vercel.json` explicitly chooses Vercel's **Other** framework preset, runs `npm run build`, and Nitro emits Vercel Build Output API files in `.vercel/output`. This fixes the previous “`.output` was not found” failure caused by forcing a Next.js deployment.
 
 1. Import the repository in Vercel and use Node.js 22.
-2. Add the Preprod environment variables shown in `.env.example`: `NEXT_PUBLIC_MIDNIGHT_NETWORK_ID=preprod` and `NEXT_PUBLIC_MIDNIGHT_WALLET=1am`.
+2. Add the production environment variables shown in `.env.example`: `NEXT_PUBLIC_MIDNIGHT_NETWORK_ID=preprod` and `NEXT_PUBLIC_MIDNIGHT_WALLET=1am`.
 3. Leave `NEXT_PUBLIC_MIDNIGHT_CONTRACT_ADDRESS` empty for the first deployment.
 4. Deploy the site.
 
-For a Vercel Preview deployment using Lace, set `NEXT_PUBLIC_MIDNIGHT_NETWORK_ID=preview` and `NEXT_PUBLIC_MIDNIGHT_WALLET=lace` in that environment.
+For a Vercel Preview deployment using 1AM, set `NEXT_PUBLIC_MIDNIGHT_NETWORK_ID=preview` and `NEXT_PUBLIC_MIDNIGHT_WALLET=1am` in that environment. The in-app toggle can then move between Preview and Preprod without rebuilding; reconnect 1AM after every switch.
 
 ## Deploy the Compact contract without Docker
 
-Preprod + 1AM is the recommended no-Docker path.
+1AM on Preview or Preprod is a Docker-free deployment path.
 
 1. Run `npm run contracts:sync-browser-assets` once after compiling.
-2. Deploy the frontend on Vercel with the Preprod / 1AM variables above.
-3. Open the live site in the browser profile containing **1AM**, and switch 1AM to **Preprod**.
-4. Fund that wallet with Preprod tNIGHT and DUST using the network faucet shown in 1AM, or the [Preprod tNIGHT faucet](https://midnight-tmnight-preprod.nethermind.dev/).
-5. In VeilPass, select **Connect wallet**, approve the request, then select **Deploy with connected wallet** in the Live contract card.
+2. Deploy the frontend on Vercel with 1AM variables. Choose **Preview** or **Preprod** in the floating in-app network toggle.
+3. Open the live site in the browser profile containing **1AM**, and switch 1AM to the same network.
+4. Fund that wallet with the matching tNIGHT and DUST: [Preview faucet](https://midnight-tmnight-preview.nethermind.dev/) or [Preprod faucet](https://midnight-tmnight-preprod.nethermind.dev/).
+5. In VeilPass, select **Connect wallet**, approve the request for the selected network, then select **Deploy with connected wallet** in the Live contract card.
 6. Keep the tab open while 1AM proves, balances, and submits the transaction. The app displays and copies the full contract address when finalization succeeds.
 7. Select **Generate proof** and then **Run private proof** to submit VeilPass's live `prove_access` circuit from the same wallet session.
 8. Paste the full address below and into Vercel as `NEXT_PUBLIC_MIDNIGHT_CONTRACT_ADDRESS`, then redeploy the frontend.
 
-The browser deployer uses the selected wallet's configured proof service where supplied, or the wallet's delegated proving provider. On Preview, Lace may require a configured local proof service; use Preprod + 1AM for the required Docker-free deployment.
+The browser deployer uses the selected 1AM wallet's configured proof service where supplied, or 1AM's delegated proving provider. No local proof service or Docker is required for this flow.
 
 ### Optional headless route
 

@@ -95,7 +95,7 @@ class EphemeralPrivateStateProvider
 
 /**
  * Deploys the compiled contract through a connected Midnight wallet. With 1AM
- * on Preprod, proving is delegated to the wallet, so no local proof server or
+ * on Preview or Preprod, proving is delegated to the wallet, so no local proof server or
  * Docker daemon is involved.
  */
 export async function deployVeilPass(

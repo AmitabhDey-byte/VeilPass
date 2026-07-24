@@ -33,8 +33,9 @@ const credentials = [
   { name: "Eligibility score", issuer: "Private issuer", status: "Shielded", updated: "Never disclosed", icon: "◌" },
 ] as const;
 
-const MIDNIGHT_NETWORK_ID = process.env.NEXT_PUBLIC_MIDNIGHT_NETWORK_ID || "preprod";
-const MIDNIGHT_WALLET_HINT = process.env.NEXT_PUBLIC_MIDNIGHT_WALLET || (MIDNIGHT_NETWORK_ID === "preview" ? "lace" : "1am");
+const DEFAULT_MIDNIGHT_NETWORK_ID = process.env.NEXT_PUBLIC_MIDNIGHT_NETWORK_ID || "preprod";
+const MIDNIGHT_NETWORK_ID = DEFAULT_MIDNIGHT_NETWORK_ID;
+const MIDNIGHT_WALLET_HINT = process.env.NEXT_PUBLIC_MIDNIGHT_WALLET || "1am";
 const MIDNIGHT_CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_MIDNIGHT_CONTRACT_ADDRESS || "Deployment pending";
 
 function shortAddress(address: string) {
@@ -68,6 +69,7 @@ function ActivityTable({ compact = false }: { compact?: boolean }) {
 
 export default function Home() {
   const [activeNav, setActiveNav] = useState<View>("Overview");
+  const [selectedNetwork, setSelectedNetwork] = useState<"preview" | "preprod">(DEFAULT_MIDNIGHT_NETWORK_ID === "preview" ? "preview" : "preprod");
   const [connected, setConnected] = useState(false);
   const [walletAddress, setWalletAddress] = useState("");
   const [walletName, setWalletName] = useState("");
@@ -109,9 +111,9 @@ export default function Home() {
     setWalletError("");
     try {
       const wallet = findMidnightWallet();
-      if (!wallet) throw new Error(`No Midnight wallet was detected. Install or enable ${MIDNIGHT_WALLET_HINT} for ${MIDNIGHT_NETWORK_ID}.`);
+      if (!wallet) throw new Error(`No Midnight wallet was detected. Install or enable ${MIDNIGHT_WALLET_HINT} for ${selectedNetwork}.`);
 
-      const api = await wallet[1].connect(MIDNIGHT_NETWORK_ID);
+      const api = await wallet[1].connect(selectedNetwork);
       const [status, unshielded, shielded, configuration] = await Promise.all([
         api.getConnectionStatus(),
         api.getUnshieldedAddress(),
@@ -175,7 +177,7 @@ export default function Home() {
     setWalletError("");
     try {
       const { deployVeilPass } = await import("@/lib/midnight-browser-deploy");
-      const deployment = await deployVeilPass(api, MIDNIGHT_NETWORK_ID);
+      const deployment = await deployVeilPass(api, selectedNetwork);
       deployedProofRef.current = deployment.proveAccess;
       setContractAddress(deployment.contractAddress);
       await navigator.clipboard?.writeText(deployment.contractAddress);
@@ -194,6 +196,21 @@ export default function Home() {
     void navigator.clipboard?.writeText(contractAddress);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1800);
+  }
+  function switchNetwork(network: "preview" | "preprod") {
+    if (network === selectedNetwork) return;
+    setSelectedNetwork(network);
+    setWalletApi(null);
+    deployedProofRef.current = null;
+    setWalletAddress("");
+    setWalletName("");
+    setWalletNetwork("");
+    setWalletError("");
+    setConnected(false);
+    setContractAddress("Deployment pending");
+    setVerified(false);
+    setNotice(`Switched to ${network}. Reconnect 1AM to continue.`);
+    window.setTimeout(() => setNotice(""), 2800);
   }
   function openView(view: View) { setActiveNav(view); window.scrollTo({ top: 0, behavior: "smooth" }); }
 
@@ -227,6 +244,11 @@ export default function Home() {
   const activityView = <section className="view-page"><div className="view-hero"><div><div className="eyebrow"><span className="eyebrow-dot" /> PUBLIC LEDGER</div><h1>Activity</h1><p>A readable trail of commitments and proof results — with no identity trail attached.</p></div><div className="activity-filter"><button className="filter-active" type="button">All activity</button><button type="button">Proofs</button><button type="button">Passes</button></div></div><div className="activity-summary"><div><span className="stat-label">Total proofs</span><strong>1,284</strong></div><div><span className="stat-label">Verified</span><strong className="green-number">1,201</strong></div><div><span className="stat-label">Public data points</span><strong>02 <small>per proof</small></strong></div><div><span className="stat-label">Private data points</span><strong className="cyan-number">04 <small>shielded</small></strong></div></div><SectionHeading kicker="TRANSACTION HISTORY" title="Every public event" action={<span className="chain-chip"><span className="live-dot" /> Synced just now</span>} /><ActivityTable /><div className="wide-info-panel small-info"><div className="info-icon">◌</div><div><span className="section-kicker">OBSERVER VIEW</span><h2>Transparent enough to verify. Private enough to trust.</h2><p>Public activity proves the system is working. It does not reveal who is behind a commitment.</p></div></div></section>;
 
   return <div className="app-shell">
+    <div className="network-toggle" role="group" aria-label="Midnight network">
+      <span>Network</span>
+      <button type="button" className={selectedNetwork === "preview" ? "active" : ""} aria-pressed={selectedNetwork === "preview"} onClick={() => switchNetwork("preview")}>Preview</button>
+      <button type="button" className={selectedNetwork === "preprod" ? "active" : ""} aria-pressed={selectedNetwork === "preprod"} onClick={() => switchNetwork("preprod")}>Preprod</button>
+    </div>
     {walletBusy && <div className="wallet-status-banner" role="status"><span className="live-dot" /><strong>Connecting {MIDNIGHT_WALLET_HINT}…</strong><span>Approve the request in your wallet</span></div>}
     {deploymentBusy && <div className="wallet-status-banner" role="status"><span className="live-dot" /><strong>Deploying VeilPass…</strong><span>1AM is creating and submitting the contract transaction</span></div>}
     {connected && !walletBusy && <div className="wallet-status-banner" role="status"><span className="live-dot" /><strong>{walletName || MIDNIGHT_WALLET_HINT} connected</strong><span>{shortAddress(walletAddress)}</span><small>{walletNetwork || MIDNIGHT_NETWORK_ID}</small></div>}
