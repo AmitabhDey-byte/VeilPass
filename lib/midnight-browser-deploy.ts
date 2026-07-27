@@ -1,5 +1,6 @@
 import type { ConnectedAPI } from "@midnight-ntwrk/dapp-connector-api";
 import type { ContractAddress, SigningKey } from "@midnight-ntwrk/compact-runtime";
+import "./browser-polyfills";
 import type {
   ExportPrivateStatesOptions,
   ImportPrivateStatesOptions,
