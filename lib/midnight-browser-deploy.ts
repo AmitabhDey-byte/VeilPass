@@ -36,6 +36,7 @@ export type VeilPassDeployment = {
   contractAddress: string;
   transactionId: string;
   transactionHash: string;
+  initializeDefaultAllowlist: () => Promise<void>;
   proveAccess: () => Promise<void>;
   registerAllowlist: (root: string) => Promise<void>;
 };
@@ -79,6 +80,19 @@ export function describePreviewDeploymentError(error: unknown): string {
     return "The Preview deployment was rejected in 1AM. No contract was deployed.";
   }
   return message || "Preview deployment failed before a contract was finalized.";
+}
+
+export function describeVeilPassProofError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  const normalized = message.toLowerCase();
+
+  if (normalized.includes("custom error: 170") || normalized.includes("invalid transaction: custom error")) {
+    return "The contract rejected this proof because its allowlist root has not been initialized. Register the default 64-zero root in Host console, then try the proof again.";
+  }
+  if (normalized.includes("dust") || normalized.includes("insufficient fee")) {
+    return "The proof transaction needs spendable DUST. Fund or activate DUST in 1AM Preview, wait for sync, then retry.";
+  }
+  return message || "The private proof was rejected before finalization.";
 }
 
 /**
@@ -292,6 +306,12 @@ export async function deployVeilPass(
     contractAddress: deployed.deployTxData.public.contractAddress,
     transactionId: finalized.txId,
     transactionHash: finalized.txHash,
+    initializeDefaultAllowlist: async () => {
+      // The Compact ledger cell is empty immediately after deployment. Publish
+      // the same zero commitment used by the browser's private witness before
+      // accepting the first proof. This is a real on-chain contract call.
+      await deployed.callTx.register_allowlist_root(new Uint8Array(32));
+    },
     proveAccess: async () => {
       await deployed.callTx.prove_access();
     },
@@ -304,6 +324,10 @@ export async function deployVeilPass(
         bytes[i] = parseInt(root.slice(i * 2, i * 2 + 2), 16);
       }
       await deployed.callTx.register_allowlist_root(bytes);
+      await privateState.set("veilpass-private-state", {
+        credentialCommitment: bytes,
+        isEligible: true,
+      });
     },
   };
 }

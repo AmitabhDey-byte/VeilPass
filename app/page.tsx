@@ -92,6 +92,7 @@ const DEFAULT_MIDNIGHT_NETWORK_ID = process.env.NEXT_PUBLIC_MIDNIGHT_NETWORK_ID 
 const MIDNIGHT_WALLET_HINT = process.env.NEXT_PUBLIC_MIDNIGHT_WALLET || "1am";
 const MIDNIGHT_CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_MIDNIGHT_CONTRACT_ADDRESS || "Deployment pending";
 const NETWORK_LABEL: Record<"preview" | "preprod", string> = { preview: "PREVIEW", preprod: "PREPROD" };
+const DEFAULT_ALLOWLIST_ROOT = "0".repeat(64);
 
 function shortAddress(address: string) {
   if (!address) return "";
@@ -282,8 +283,8 @@ export default function Home() {
       setActiveNav("Overview");
       pushNotice(activePass ? `${activePass.name} verified on Midnight.` : "Private access proof finalized on Midnight.");
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Private access proof failed.";
-      setWalletError(message);
+      const { describeVeilPassProofError } = await import("@/lib/midnight-browser-deploy");
+      setWalletError(describeVeilPassProofError(error));
       pushNotice("Private proof was not submitted");
     } finally {
       setProofBusy(false);
@@ -326,9 +327,12 @@ export default function Home() {
       if (deployment.registerAllowlist) registerAllowlistRef.current = deployment.registerAllowlist;
       setContractAddress(deployment.contractAddress);
       setDeploymentTransactionId(deployment.transactionId);
+      setAllowlistRoot(DEFAULT_ALLOWLIST_ROOT);
+      pushNotice("Contract finalized. Initializing the Preview allowlist…");
+      await deployment.initializeDefaultAllowlist();
       await navigator.clipboard?.writeText(deployment.contractAddress);
       recordActivity({ commitment: deployment.contractAddress.slice(0, 8) + "…" + deployment.contractAddress.slice(-4), type: "Allowlist registration", state: "Verified" });
-      pushNotice("Preview contract finalized. Full address copied to clipboard.");
+      pushNotice("Preview contract and default allowlist finalized. Full address copied to clipboard.");
     } catch (error) {
       const { describePreviewDeploymentError } = await import("@/lib/midnight-browser-deploy");
       setWalletError(describePreviewDeploymentError(error));

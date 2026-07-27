@@ -115,7 +115,8 @@ The browser deployer uses the selected 1AM wallet's configured proof service whe
 ## Deployment record
 
 - Contract: `veil-allowlist.compact`
-- Preview contract address: pending deployment
+- Preview contract address: `27d31144f351eea606aa7cf1abbb198c87711169c68a919449886e3783e599f1`
+- Preview deployment transaction ID: `00a230e8cec48a7cba1139e2f81efe134341874367628a9b1e067a5d6db5ed808f`
 - Preprod contract address: pending deployment
 - Managed output: `managed/veil-allowlist/`
 
