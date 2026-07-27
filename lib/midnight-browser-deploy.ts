@@ -42,6 +42,25 @@ export type VeilPassDeployment = {
 
 const PREVIEW_NETWORK_ID = "preview";
 
+/**
+ * Compact identifies a circuit as `contract#circuit`. A literal `#` is a URL
+ * fragment, so FetchZkConfigProvider would otherwise ask Vercel for
+ * `/keys/veil-allowlist` instead of `/keys/prove_access.verifier`.
+ */
+const fetchBrowserZkAsset: typeof fetch = (input, init) => {
+  const source = input instanceof Request ? input.url : input.toString();
+  const url = new URL(source, window.location.origin);
+
+  if (url.hash) {
+    const filename = decodeURIComponent(url.hash.slice(1));
+    const directory = url.pathname.slice(0, url.pathname.lastIndexOf("/"));
+    url.pathname = `${directory}/${filename}`;
+    url.hash = "";
+  }
+
+  return fetch(url.toString(), init);
+};
+
 /** Convert wallet, indexer, and proving failures into useful browser-safe text. */
 export function describePreviewDeploymentError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
@@ -196,7 +215,10 @@ export async function deployVeilPass(
 
   setNetworkId(requestedNetwork);
   const addresses = await wallet.getShieldedAddresses();
-  const zkConfigProvider = new FetchZkConfigProvider<string>(window.location.origin);
+  const zkConfigProvider = new FetchZkConfigProvider<string>(
+    window.location.origin,
+    fetchBrowserZkAsset,
+  );
   // Delegate proving to 1AM. This keeps the wallet's selected Preview proving
   // service in control and avoids exposing any proof endpoint in Vercel config.
   const proofProvider = createProofProvider(
