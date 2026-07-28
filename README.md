@@ -123,6 +123,12 @@ The browser deployer uses the selected 1AM wallet's configured proof service whe
 - Managed output: `managed/veil-allowlist/`
 
 Vercel hosts the frontend; it does not create a Midnight contract by itself. Do not replace either address with a shortened or invented value. Only insert the complete address shown after a successful wallet deployment.
+## three test passing screenshots
+<img width="1600" height="800" alt="Screenshot 2026-07-28 112026" src="https://github.com/user-attachments/assets/23c95d81-a83d-4bcc-9f15-36c7bae0f870" />
+<img width="1600" height="800" alt="Screenshot 2026-07-28 111914" src="https://github.com/user-attachments/assets/e9d3123c-4085-4cb2-82c5-d806951fbb2e" />
+<img width="900" height="400" alt="Screenshot 2026-07-28 111741" src="https://github.com/user-attachments/assets/d0dea3dc-beb0-4445-b4ba-b149e3005d0a" />
+
+
 
 ## Submission links
 
