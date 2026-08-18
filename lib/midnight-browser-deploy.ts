@@ -17,7 +17,7 @@ type VeilPassPrivateState = {
   isEligible: boolean;
 };
 
-type FinalizedPreviewDeployment = {
+type FinalizedDeployment = {
   deployTxData: {
     public: {
       contractAddress: string;
@@ -41,7 +41,7 @@ export type VeilPassDeployment = {
   registerAllowlist: (root: string) => Promise<void>;
 };
 
-const PREVIEW_NETWORK_ID = "preview";
+type MidnightNetwork = "preview" | "preprod";
 
 /**
  * Compact identifies a circuit as `contract#circuit`. A literal `#` is a URL
@@ -63,26 +63,29 @@ const fetchBrowserZkAsset: typeof fetch = (input, init) => {
 };
 
 /** Convert wallet, indexer, and proving failures into useful browser-safe text. */
-export function describePreviewDeploymentError(error: unknown): string {
+export function describeMidnightDeploymentError(error: unknown, network: MidnightNetwork): string {
   const message = error instanceof Error ? error.message : String(error);
   const normalized = message.toLowerCase();
 
   if (normalized.includes("no_spendable_dust") || normalized.includes("dust") || normalized.includes("insufficient fee")) {
-    return "No spendable DUST is available for this Preview deployment. Fund or activate DUST in 1AM, wait for it to sync, then try again.";
+    return `No spendable DUST is available for this ${network} deployment. Fund or activate DUST in 1AM, wait for it to sync, then try again.`;
   }
   if (normalized.includes("prover") || normalized.includes("proving") || normalized.includes("proof server")) {
-    return "1AM could not reach its configured Preview proving service. Check the wallet's Preview network settings and try again once the proving service is available.";
+    return `1AM could not reach its configured ${network} proving service. Check the wallet's ${network} network settings and try again once the proving service is available.`;
   }
   if (normalized.includes("indexer") || normalized.includes("websocket")) {
-    return "1AM's configured Preview indexer is unavailable. Check the wallet's Preview network settings, then reconnect and retry.";
+    return `1AM's configured ${network} indexer is unavailable. Check the wallet's ${network} network settings, then reconnect and retry.`;
   }
   if (normalized.includes("rejected") || normalized.includes("denied")) {
-    return "The Preview deployment was rejected in 1AM. No contract was deployed.";
+    return `The ${network} deployment was rejected in 1AM. No contract was deployed.`;
   }
-  return message || "Preview deployment failed before a contract was finalized.";
+  return message || `${network} deployment failed before a contract was finalized.`;
 }
 
-export function describeVeilPassProofError(error: unknown): string {
+/** @deprecated Use describeMidnightDeploymentError with the selected network. */
+export const describePreviewDeploymentError = (error: unknown) => describeMidnightDeploymentError(error, "preview");
+
+export function describeVeilPassProofError(error: unknown, network: MidnightNetwork = "preview"): string {
   const message = error instanceof Error ? error.message : String(error);
   const normalized = message.toLowerCase();
 
@@ -90,7 +93,7 @@ export function describeVeilPassProofError(error: unknown): string {
     return "The contract rejected this proof because its allowlist root has not been initialized. Register the default 64-zero root in Host console, then try the proof again.";
   }
   if (normalized.includes("dust") || normalized.includes("insufficient fee")) {
-    return "The proof transaction needs spendable DUST. Fund or activate DUST in 1AM Preview, wait for sync, then retry.";
+    return `The proof transaction needs spendable DUST. Fund or activate DUST in 1AM ${network}, wait for sync, then retry.`;
   }
   return message || "The private proof was rejected before finalization.";
 }
@@ -171,7 +174,7 @@ class EphemeralPrivateStateProvider
 }
 
 /**
- * Deploys the compiled contract through 1AM on Preview. Proving is delegated
+ * Deploys the compiled contract through 1AM on the selected supported network. Proving is delegated
  * to the wallet, so no local proof server or Docker daemon is involved.
  */
 export async function deployVeilPass(
@@ -182,8 +185,8 @@ export async function deployVeilPass(
     throw new Error("Contract deployment must be started in a browser with a connected Midnight wallet.");
   }
 
-  if (requestedNetwork !== PREVIEW_NETWORK_ID) {
-    throw new Error("Preview deployment is only available on the preview network.");
+  if (requestedNetwork !== "preview" && requestedNetwork !== "preprod") {
+    throw new Error("Deployment is supported only on the preview or preprod network.");
   }
 
   await wallet.hintUsage([
@@ -233,7 +236,7 @@ export async function deployVeilPass(
     window.location.origin,
     fetchBrowserZkAsset,
   );
-  // Delegate proving to 1AM. This keeps the wallet's selected Preview proving
+  // Delegate proving to 1AM. This keeps the wallet's selected network proving
   // service in control and avoids exposing any proof endpoint in Vercel config.
   const proofProvider = createProofProvider(
     await wallet.getProvingProvider(zkConfigProvider.asKeyMaterialProvider()),
@@ -281,11 +284,11 @@ export async function deployVeilPass(
       midnightProvider,
     } as unknown as MidnightProviders;
 
-  const submitPreviewDeployment = deployContract as unknown as (
+  const submitDeployment = deployContract as unknown as (
     deploymentProviders: MidnightProviders,
     deploymentOptions: unknown,
-  ) => Promise<FinalizedPreviewDeployment>;
-  const deployed = await submitPreviewDeployment(
+  ) => Promise<FinalizedDeployment>;
+  const deployed = await submitDeployment(
     providers,
     {
       compiledContract,
@@ -299,7 +302,7 @@ export async function deployVeilPass(
 
   const finalized = deployed.deployTxData.public;
   if (finalized.status !== "SucceedEntirely") {
-    throw new Error("Preview deployment did not finalize. No contract address is being reported.");
+    throw new Error(`${requestedNetwork} deployment did not finalize. No contract address is being reported.`);
   }
 
   return {

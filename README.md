@@ -12,7 +12,7 @@ VeilPass is a privacy-first allowlist-access dApp built for Midnight. A member c
 
 - `app/` — responsive VeilPass console with multi-page navigation, wallet connect, access views, credentials, activity, privacy model, and Gemini-ready assistant.
 - `contracts/veil-allowlist.compact` — Compact contract with public ledger state, private witnesses, and deliberate `disclose()` use.
-- `managed/veil-allowlist/` — generated contract binding, circuits, proving/verifying keys, and ZKIR output.
+- `managed/veil-allowlist/` — generated contract binding, circuits, proving/verifying keys, and ZKIR output. This is the single checked-in source of proof artifacts; the Vercel build copies the required browser assets into `public/` automatically.
 - `public/keys/` and `public/zkir/` — browser-served proof assets for the connected wallet.
 - `tests/rendered-html.test.mjs` — three render and artifact smoke tests.
 - `.github/workflows/ci.yml` — build and test workflow on each push and pull request.

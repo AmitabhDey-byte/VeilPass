@@ -12,3 +12,6 @@ managed/*
 .env.local
 .midnight-deployments.local.json
 .midnight-state.json
+.superdesign/tmp/
+public/keys/
+public/zkir/
