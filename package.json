@@ -9,7 +9,7 @@
     "dev": "vinext dev",
     "build": "npm run contracts:sync-browser-assets && vinext build",
     "start": "vinext start",
-    "test": "npm run build && node --test tests/rendered-html.test.mjs",
+    "test": "npm run build && node --test tests/*.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern managed --ignore-pattern .vercel --ignore-pattern .output",
     "check:compact-source": "node scripts/validate-compact-source.mjs",
     "contracts:compile": "powershell -ExecutionPolicy Bypass -File scripts/compile-compact.ps1",
