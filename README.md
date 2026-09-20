@@ -2,6 +2,10 @@
 
 > Prove you belong. Keep your name.
 
+## Product X profile
+
+Follow VeilPass on X: [@ngdsemtfb](https://x.com/ngdsemtfb)
+
 VeilPass is a privacy-first allowlist-access dApp built for Midnight. A member can prove eligibility for a private space without publishing their name, credential issuer, or the value behind the claim.
 
 ## Product proposal
