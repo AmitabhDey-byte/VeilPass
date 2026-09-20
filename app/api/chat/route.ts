@@ -1,78 +1,75 @@
+import { generateText } from "@/lib/ai/gemini";
+import { redactSecrets } from "@/lib/ai/privacy";
+
 type ChatInput = { role: "user" | "assistant"; text: string };
-type ChatResponse = { text: string; mode: "demo" | "gemini" };
+type ChatResponse = { text: string; mode: "local" | "gemini"; suggestions: string[] };
+type AppContext = {
+  network?: string;
+  connected?: boolean;
+  deployed?: boolean;
+  credentialCount?: number;
+  activeView?: string;
+  proofVerified?: boolean;
+};
 
-const GEMINI_MODELS = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash", "gemini-2.5-flash"] as const;
+const SYSTEM_PROMPT = `You are Veil, the privacy copilot inside VeilPass.
+Give concise, actionable guidance about selective disclosure, zero-knowledge proofs, Compact contracts, 1AM, and Midnight.
+Use the supplied UI state to recommend the next safe action. Never request or repeat a seed phrase, API key, private key, raw credential, or private witness.
+Distinguish clearly between simulated local guidance and on-chain actions. Keep the answer under 100 words.`;
 
-const SYSTEM_PROMPT =
-  "You are Veil, the calm privacy guide inside VeilPass. Explain selective disclosure, credentials, Compact contracts, the 1AM wallet, and Midnight (Preview and Preprod) in plain language. Never ask for secrets, API keys, seed phrases, or private credentials. Keep answers under 90 words. Prefer short sentences.";
-
-function fallback(message: string): string {
-  const prompt = message.toLowerCase();
-  if (prompt.includes("credential")) return "Your credentials stay in the private witness layer. VeilPass uses them to build a proof, but does not publish the name, issuer, or underlying value.";
-  if (prompt.includes("proof") || prompt.includes("work") || prompt.includes("how")) return "Connect a wallet, choose a pass, then run a private proof. The circuit checks eligibility and publishes only a valid or invalid result.";
-  if (prompt.includes("midnight") || prompt.includes("compact")) return "Midnight is the privacy network underneath VeilPass. The Compact contract keeps witnesses private while making selected ledger state auditable.";
-  if (prompt.includes("host") || prompt.includes("register") || prompt.includes("allowlist")) return "Switch to the Host console tab to publish a new allowlist root. The registration is the only public action — the credential checks stay private.";
-  if (prompt.includes("1am") || prompt.includes("lace") || prompt.includes("wallet")) return "VeilPass prefers the 1AM wallet on Preview or Preprod. Pick a network with the floating toggle, then connect — you will need tNIGHT and DUST from the matching faucet.";
-  if (prompt.includes("pass") || prompt.includes("access")) return "Open Access passes to see every room available to this wallet. Founders Circle is currently verified in this demo.";
-  if (prompt.includes("preview") || prompt.includes("preprod") || prompt.includes("network") || prompt.includes("faucet")) return "Use the floating Network toggle to switch between Preview and Preprod. The wallet must be on the same network and funded with tNIGHT plus DUST from the matching faucet.";
-  return "I can explain credentials, private proofs, access passes, the Host console, or how VeilPass uses Midnight. What should we explore?";
+function suggestions(context: AppContext): string[] {
+  if (!context.connected) return ["How do I connect safely?", "What stays private?"];
+  if (!context.deployed) return ["Am I ready to deploy?", "Explain DUST fees"];
+  if (!context.proofVerified) return ["Guide my first proof", "Minimize disclosure"];
+  return ["Explain my latest proof", "Review my privacy posture"];
 }
 
-async function tryGemini(apiKey: string, contents: Array<{ role: string; parts: Array<{ text: string }> }>): Promise<string | null> {
-  for (const model of GEMINI_MODELS) {
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
-    try {
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-          contents,
-        }),
-      });
-      if (!response.ok) continue;
-      const payload = await response.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
-      const text = payload.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("").trim();
-      if (text) return text;
-    } catch {
-      // try the next model
-    }
-  }
-  return null;
+function fallback(message: string, context: AppContext): string {
+  const prompt = message.toLowerCase();
+  if (/(seed|private key|api key|secret)/.test(prompt)) return "Keep that secret outside VeilPass. I will never need a seed phrase, API key, private key, or raw credential. If one was exposed, rotate it in the service that issued it.";
+  if (!context.connected) return `Start by connecting 1AM on ${context.network === "preview" ? "Preview" : "Preprod"}. VeilPass reads wallet readiness, but your private witness stays local.`;
+  if (prompt.includes("credential")) return "A credential is private evidence. VeilPass should prove only the smallest required claim—such as eligibility—without publishing its issuer, value, or owner.";
+  if (prompt.includes("proof") || prompt.includes("next")) return context.deployed
+    ? "Choose an access pass, review its required claim, then run the wallet-side proof. Only the verification result and public commitment reach the ledger."
+    : "Your wallet is ready. Deploy or select a contract before proving, then confirm the transaction details in 1AM.";
+  if (prompt.includes("risk") || prompt.includes("posture")) return "Open Privacy intelligence for an explainable scan of wallet, contract, credential, and network readiness. It sends only minimized state—not raw witnesses—to the AI pipeline.";
+  return `You are viewing ${context.activeView || "VeilPass"} on ${context.network || "preprod"}. I can guide your next proof, explain what stays private, or review deployment readiness.`;
 }
 
 export async function POST(request: Request): Promise<Response> {
   try {
-    const body = await request.json() as { messages?: ChatInput[]; network?: string };
-    const messages = body.messages ?? [];
+    const body = await request.json() as { messages?: ChatInput[]; context?: AppContext };
+    const messages = (body.messages ?? []).slice(-8);
+    const context = body.context ?? {};
     const lastUserMessage = [...messages].reverse().find((message) => message.role === "user")?.text ?? "";
-    const apiKey = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
+    const safeMessages = messages.map((message) => `${message.role}: ${redactSecrets(message.text)}`).join("\n");
+    const contextSummary = JSON.stringify({
+      network: context.network,
+      walletConnected: Boolean(context.connected),
+      contractAvailable: Boolean(context.deployed),
+      credentialCount: Math.max(0, Number(context.credentialCount) || 0),
+      activeView: context.activeView,
+      proofVerified: Boolean(context.proofVerified),
+    });
 
-    if (!apiKey) {
-      const payload: ChatResponse = { text: fallback(lastUserMessage), mode: "demo" };
-      return Response.json(payload);
-    }
+    const text = await generateText({
+      system: SYSTEM_PROMPT,
+      prompt: `Minimized application state: ${contextSummary}\nRecent conversation:\n${safeMessages}`,
+      temperature: 0.25,
+    });
 
-    const contents = messages.slice(-8).map((message) => ({
-      role: message.role === "assistant" ? "model" : "user",
-      parts: [{ text: message.text }],
-    }));
-
-    const networkHint = body.network ? ` The user is on the ${body.network} network.` : "";
-    const networkAwareContents = contents.length
-      ? [{ role: "user", parts: [{ text: `Context: this is the VeilPass demo on Midnight.${networkHint}` }] }, ...contents]
-      : contents;
-
-    const text = await tryGemini(apiKey, networkAwareContents);
-    if (text) {
-      const payload: ChatResponse = { text, mode: "gemini" };
-      return Response.json(payload);
-    }
-
-    const payload: ChatResponse = { text: fallback(lastUserMessage), mode: "demo" };
+    const payload: ChatResponse = {
+      text: text || fallback(lastUserMessage, context),
+      mode: text ? "gemini" : "local",
+      suggestions: suggestions(context),
+    };
     return Response.json(payload);
   } catch {
-    const payload: ChatResponse = { text: "Veil is in demo mode right now. Ask me about proofs, credentials, or the privacy model.", mode: "demo" };
-    return Response.json(payload);
+    const payload: ChatResponse = {
+      text: "I could not reach the reasoning pipeline. Your data stayed local; try again or open Privacy intelligence for an offline readiness scan.",
+      mode: "local",
+      suggestions: ["What stays private?", "How do proofs work?"],
+    };
+    return Response.json(payload, { status: 200 });
   }
 }
