@@ -32,7 +32,7 @@ a { color: inherit; }
 
 .sidebar { position: relative; z-index: 3; display: flex; flex: 0 0 244px; flex-direction: column; min-height: 100vh; padding: 30px 16px 18px; border-right: 1px solid var(--line); background: rgba(255,255,255,.82); backdrop-filter: blur(16px); }
 .brand-lockup { display: flex; align-items: center; gap: 11px; padding: 0 10px 43px; }
-.brand-mark { display: grid; width: 34px; height: 34px; place-items: center; border-radius: 12px; background: var(--indigo); box-shadow: 0 7px 14px rgba(49,92,114,.16); color: white; font-size: 17px; }
+.brand-mark { width: 38px; height: 38px; flex: 0 0 auto; border-radius: 12px; background: url("/veilpass-bright-icon.png") center / cover no-repeat; box-shadow: 0 7px 14px rgba(75,70,229,.16); }
 .brand-lockup strong { display: block; font-size: 17px; letter-spacing: -.05em; }
 .brand-lockup span { display: block; margin-top: 3px; color: var(--muted); font-size: 9px; font-weight: 700; letter-spacing: .11em; text-transform: uppercase; }
 .workspace-label, .section-kicker { display: block; color: var(--soft); font-size: 9px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; }
