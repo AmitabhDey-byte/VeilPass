@@ -10,7 +10,8 @@ VeilPass is a privacy-first allowlist-access dApp built for Midnight. A member c
 
 ## Repository contents
 
-- `app/` — responsive VeilPass console with multi-page navigation, wallet connect, access views, credentials, activity, privacy model, and Gemini-ready assistant.
+- `app/` — responsive VeilPass console with wallet flows, access views, a context-aware copilot, and a four-agent privacy intelligence workspace.
+- `lib/ai/` — privacy-safe AI contracts, secret redaction, score normalization, and a structured Gemini client with timeouts and local fallback support.
 - `contracts/veil-allowlist.compact` — Compact contract with public ledger state, private witnesses, and deliberate `disclose()` use.
 - `managed/veil-allowlist/` — generated contract binding, circuits, proving/verifying keys, and ZKIR output. This is the single checked-in source of proof artifacts; the Vercel build copies the required browser assets into `public/` automatically.
 - `public/keys/` and `public/zkir/` — browser-served proof assets for the connected wallet.
@@ -52,9 +53,31 @@ NEXT_PUBLIC_MIDNIGHT_CONTRACT_ADDRESS=
 NEXT_PUBLIC_MIDNIGHT_PREVIEW_CONTRACT_ADDRESS=
 NEXT_PUBLIC_MIDNIGHT_PREPROD_CONTRACT_ADDRESS=
 GEMINI_API_KEY=your_optional_server_side_key
+GEMINI_MODEL=gemini-2.5-flash
 ```
 
-`GEMINI_API_KEY` is optional and is used only by the server chat route; it is never exposed in browser code.
+`GEMINI_API_KEY` is optional and is used only by server-side AI routes; it is never exposed in browser code.
+
+## Privacy intelligence pipelines
+
+Open **Privacy intelligence** in the app to use four specialized pipelines:
+
+1. **Threat scan** — scores wallet, network, contract, credential, and proof readiness and returns evidence-backed findings.
+2. **Policy compiler** — converts a plain-language access goal into public signals, private signals, risk notes, retention guidance, and a deterministic 32-byte commitment that can be staged in the Host console.
+3. **Disclosure planner** — compares pass requirements with local credential labels and recommends the smallest safe public proof surface.
+4. **Ledger analyst** — summarizes aggregate event patterns without sending commitments, wallet addresses, or private witnesses.
+
+The Veil copilot also receives minimized UI context so its next-step guidance reflects the selected network and current proof journey.
+
+### AI safety boundary
+
+- AI routes receive booleans, counts, event types, policy prose, requirements, and credential labels—not raw credentials or witnesses.
+- Potential seed phrases, API keys, tokens, and long private values are redacted before model inference.
+- Gemini calls use structured JSON schemas, a 12-second timeout, bounded outputs, and conservative normalization.
+- Every pipeline has a deterministic local implementation. The workspace therefore remains functional when `GEMINI_API_KEY` is absent or the provider is unavailable.
+- Generated policies are drafts. Staging a policy fills the Host console, but the user must review and explicitly register it through 1AM.
+
+The default model is `gemini-2.5-flash`. Set `GEMINI_MODEL` only when your deployment needs a different compatible model. API keys remain server-side and must be configured through hosting secrets.
 
 ## Compact toolchain and generated output
 
@@ -82,7 +105,7 @@ npm run lint
 npm test
 ```
 
-`npm test` runs the production build followed by three smoke tests. The GitHub Actions workflow runs the same build and test checks on every push and pull request.
+`npm test` runs the production build followed by eight tests: four structured AI pipeline checks, one secret-handling copilot check, and three rendering/artifact smoke tests. The GitHub Actions workflow runs the same build and test checks on every push and pull request.
 
 ## Deploy on Vercel
 

@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "VeilPass — Private allowlist access",
-  description: "Prove you belong without revealing your identity. A Midnight selective disclosure demo.",
+  title: "VeilPass — AI privacy intelligence for Midnight",
+  description: "Compile private access policies, minimize disclosure, and prove you belong without revealing your identity.",
   icons: { icon: "/favicon.svg", shortcut: "/favicon.svg" },
 };
 
