@@ -4,9 +4,11 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import type { ConnectedAPI, InitialAPI } from "@midnight-ntwrk/dapp-connector-api";
+import { PrivacyIntelligence } from "@/app/components/privacy-intelligence";
+import type { PolicyBlueprint } from "@/lib/ai/types";
 
 type Network = "preview" | "preprod";
-type View = "Overview" | "Passport" | "Access passes" | "Credentials" | "Activity" | "Network health" | "Host console";
+type View = "Overview" | "Passport" | "Access passes" | "Privacy intelligence" | "Credentials" | "Activity" | "Network health" | "Host console";
 type ChatMessage = { role: "user" | "assistant"; text: string };
 type PassState = "Ready to prove" | "Verified" | "Issued" | "Pending";
 type ActivityFilter = "All activity" | "Proofs" | "Passes";
@@ -27,6 +29,7 @@ const navItems: Array<{ label: View; icon: string; group: "workspace" | "vault" 
   { label: "Overview", icon: "◒", group: "workspace" },
   { label: "Passport", icon: "◌", group: "workspace" },
   { label: "Access passes", icon: "◇", group: "workspace" },
+  { label: "Privacy intelligence", icon: "✦", group: "workspace" },
   { label: "Network health", icon: "⌁", group: "workspace" },
   { label: "Credentials", icon: "⌑", group: "vault" },
   { label: "Activity", icon: "↗", group: "vault" },
@@ -268,6 +271,12 @@ export default function Home() {
     if (userCredentials.some((existing) => existing.name === credential.name)) { pushNotice(`${credential.name} is already in your vault.`); return; }
     setUserCredentials((current) => [...current, credential]); setShowCredentialImport(false); pushNotice(`${credential.name} added to your private vault.`);
   }
+  function applyCompiledPolicy(policy: PolicyBlueprint) {
+    setAllowlistName(policy.name);
+    setAllowlistRoot(policy.suggestedRoot);
+    setActiveNav("Host console");
+    pushNotice("AI policy staged in the Host console. Review it before registering.");
+  }
   async function sendChat(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); const text = chatInput.trim(); if (!text || chatBusy) return;
     const next = [...chatMessages, { role: "user" as const, text }]; setChatMessages(next); setChatInput(""); setChatBusy(true);
@@ -295,11 +304,13 @@ export default function Home() {
 
   const activityView = <section className="view-page"><PageIntro eyebrow="Public ledger" title={<>A readable trail,<br /><em>without an identity trail.</em></>}>Observers can verify activity, not people. These records show commitments and results only.</PageIntro><div className="activity-summary"><Metric label="Proofs" value={String(activityCounts.proofs)} detail="validity checks" /><Metric label="Access passes" value={String(activityCounts.passes)} detail="private entries" /><Metric label="Root registrations" value={String(activityCounts.registrations)} detail="host operations" /><Metric label="Private data" value="0 bytes" detail="in public records" accent="cedar" /></div><div className="filter-bar">{(["All activity", "Proofs", "Passes"] as ActivityFilter[]).map((label) => <button key={label} className={activityFilter === label ? "active" : ""} onClick={() => setActivityFilter(label)} type="button">{label}</button>)}</div><SectionHeading kicker="Transaction history" title="Every public event" action={<span className="chain-chip"><i />Synced now</span>} /><ActivityTable rows={filteredActivity} highlight={activePass?.commitment} /></section>;
 
+  const intelligenceView = <PrivacyIntelligence network={selectedNetwork} connected={connected} deployed={deployed} walletMatchesNetwork={connected && walletNetwork === selectedNetwork} proofVerified={verified} credentialLabels={userCredentials.map((credential) => credential.name)} passes={PASS_DEFINITIONS.map(({ id, name, requirements }) => ({ id, name, requirements }))} activity={activityLog.map(({ type, state, time }) => ({ type, state, time }))} onApplyPolicy={applyCompiledPolicy} />;
+
   const healthView = <section className="view-page"><PageIntro eyebrow="Network health" title={<>A calm check before<br /><em>you make a claim.</em></>}>VeilPass reads the selected wallet configuration at connection time. This page makes the requirements visible before any transaction begins.</PageIntro><div className="health-grid"><HealthCard title="Wallet" value={connected ? "Ready" : "Needs connection"} detail={connected ? `${walletName || MIDNIGHT_WALLET_HINT} · ${shortAddress(walletAddress)}` : `Connect 1AM on ${NETWORK_LABEL[selectedNetwork]}.`} ready={connected} action={!connected ? <button className="secondary-button" onClick={() => connectWallet()} type="button">Connect 1AM →</button> : undefined} /><HealthCard title="Selected network" value={NETWORK_LABEL[selectedNetwork]} detail="The wallet must match this network before a proof or deployment can start." ready={connected && walletNetwork === selectedNetwork} action={<a className="text-button" href={NETWORK_FAUCET[selectedNetwork]} target="_blank" rel="noreferrer">Get tNIGHT + DUST ↗</a>} /><HealthCard title="Proof service" value="Wallet managed" detail="1AM supplies the configured proving provider and indexer endpoints; Vercel does not host a proof server." ready={connected} /><HealthCard title="Contract session" value={deployed ? "Address available" : "Not deployed"} detail={deployed ? shortAddress(contractAddress) : `Deploy a real contract on ${NETWORK_LABEL[selectedNetwork]} when your wallet has DUST.`} ready={deployed} action={!deployed ? <button className="secondary-button" type="button" onClick={deploySelectedNetwork} disabled={deploymentBusy}>{deploymentBusy ? "Deploying…" : `Deploy to ${NETWORK_LABEL[selectedNetwork]} →`}</button> : undefined} /></div></section>;
 
   const hostView = <section className="view-page"><PageIntro eyebrow="Host console" title={<>Publish a private<br /><em>allowlist root.</em></>}>Hosts disclose a 32-byte commitment—not a member list. Each member later proves eligibility using a private witness.</PageIntro><div className="host-grid"><article className="host-card"><span className="section-kicker">Allowlist metadata</span><h2>Define the room</h2><label>Allowlist name<input value={allowlistName} onChange={(event) => setAllowlistName(event.target.value)} placeholder="Cohort name" /></label><label>32-byte commitment<textarea value={allowlistRoot} onChange={(event) => setAllowlistRoot(event.target.value.replace(/[^0-9a-fA-F]/g, "").slice(0, 64))} placeholder="64 hex characters" rows={3} spellCheck={false} /><small>{allowlistRoot.length} / 64 hex characters</small></label><div><button className="secondary-button" type="button" onClick={() => setAllowlistRoot(randomHex(32))}>Generate root</button><button className="primary-button" type="button" onClick={registerAllowlistRoot} disabled={allowlistRegistrationBusy}>{allowlistRegistrationBusy ? "Registering…" : "Register root"} →</button></div></article><article className="host-card"><span className="section-kicker">The public / private split</span><h2>One public call. Many private proofs.</h2><ol><li><b>01</b><p><strong>Compute the commitment</strong>Hash accepted credentials into a 32-byte root.</p></li><li><b>02</b><p><strong>Register the root</strong><code>disclose()</code> publishes the root and nothing else.</p></li><li><b>03</b><p><strong>Let members prove privately</strong>Each witness is evaluated locally by the ZK circuit.</p></li></ol></article><article className="host-card deployment-card"><span className="section-kicker">Current network</span><h2>{NETWORK_LABEL[selectedNetwork]}</h2><strong>{deployed ? shortAddress(contractAddress) : "No session contract"}</strong><p>{deployed ? "The displayed address is copyable from the Overview card. Browser-private state remains only in this session." : "Connect 1AM, fund DUST, then use the real deploy action."}</p><button className="primary-button" type="button" onClick={deploySelectedNetwork} disabled={deploymentBusy}>{deploymentBusy ? "Deploying…" : `Deploy to ${NETWORK_LABEL[selectedNetwork]}`} →</button></article></div></section>;
 
-  const currentView = activeNav === "Overview" ? overview : activeNav === "Passport" ? passportView : activeNav === "Access passes" ? passesView : activeNav === "Credentials" ? credentialsView : activeNav === "Activity" ? activityView : activeNav === "Network health" ? healthView : hostView;
+  const currentView = activeNav === "Overview" ? overview : activeNav === "Passport" ? passportView : activeNav === "Access passes" ? passesView : activeNav === "Privacy intelligence" ? intelligenceView : activeNav === "Credentials" ? credentialsView : activeNav === "Activity" ? activityView : activeNav === "Network health" ? healthView : hostView;
   const pageTransition = reducedMotion ? {} : { initial: { opacity: 0, y: 14 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: -8 }, transition: { duration: 0.28 } };
 
   return <div className="app-shell">
