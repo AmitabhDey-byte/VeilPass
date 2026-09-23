@@ -146,7 +146,8 @@ The browser deployer uses the selected 1AM wallet's configured proof service whe
 - Contract: `veil-allowlist.compact`
 - Preview contract address: `27d31144f351eea606aa7cf1abbb198c87711169c68a919449886e3783e599f1`
 - Preview deployment transaction ID: `00a230e8cec48a7cba1139e2f81efe134341874367628a9b1e067a5d6db5ed808f`
-- Preprod contract address: pending deployment
+- Preprod contract address: `1b35e2fcea7b313f7ff1ff7c0af6df34a3f5dedd26a390c7534863727f022309`
+- Preprod deployment transaction ID: `0064d5d9d1378733d20fa79c58f08bdfeb5281e2cab27f574750321210716f744c`
 - Managed output: `managed/veil-allowlist/`
 
 Vercel hosts the frontend; it does not create a Midnight contract by itself. Do not replace either address with a shortened or invented value. Only insert the complete address shown after a successful wallet deployment.
