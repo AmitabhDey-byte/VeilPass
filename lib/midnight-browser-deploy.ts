@@ -3,8 +3,11 @@ import type { ContractAddress, SigningKey } from "@midnight-ntwrk/compact-runtim
 import "./browser-polyfills";
 import {
   createSingleMemberPolicy,
+  bytesToHex,
   defaultPolicyExpiry,
   DEFAULT_POLICY_CAPACITY,
+  hexToField,
+  parsePassId,
   type VeilPassPrivateState,
 } from "./veilpass-policy";
 import type {
@@ -18,6 +21,8 @@ import type {
   WalletProvider,
 } from "@midnight-ntwrk/midnight-js/types";
 
+type FinalizedCall<T> = { private: { result: T } };
+
 type FinalizedDeployment = {
   deployTxData: {
     public: {
@@ -28,8 +33,12 @@ type FinalizedDeployment = {
     };
   };
   callTx: {
-    prove_access(): Promise<void>;
-    rotate_policy(root: bigint, maxPasses: bigint, validUntil: bigint): Promise<void>;
+    prove_access(): Promise<FinalizedCall<Uint8Array>>;
+    rotate_policy(root: bigint, maxPasses: bigint, validUntil: bigint): Promise<FinalizedCall<[]>>;
+    pause_policy(): Promise<FinalizedCall<[]>>;
+    resume_policy(): Promise<FinalizedCall<[]>>;
+    revoke_pass(passId: Uint8Array): Promise<FinalizedCall<[]>>;
+    validate_pass(passId: Uint8Array): Promise<FinalizedCall<boolean>>;
   };
 };
 
@@ -39,8 +48,13 @@ export type VeilPassDeployment = {
   transactionHash: string;
   policyRoot: string;
   initializeDefaultAllowlist: () => Promise<void>;
-  proveAccess: () => Promise<void>;
-  registerAllowlist: (root: string) => Promise<void>;
+  proveAccess: () => Promise<string>;
+  registerAllowlist: (root: string, maxPasses?: number, validUntil?: number) => Promise<void>;
+  rotateToFreshPolicy: (maxPasses?: number, validUntil?: number) => Promise<string>;
+  pausePolicy: () => Promise<void>;
+  resumePolicy: () => Promise<void>;
+  revokePass: (passId: string) => Promise<void>;
+  validatePass: (passId: string) => Promise<boolean>;
 };
 
 type MidnightNetwork = "preview" | "preprod";
@@ -330,17 +344,43 @@ export async function deployVeilPass(
     // The constructor now atomically installs the initial governed policy.
     initializeDefaultAllowlist: async () => undefined,
     proveAccess: async () => {
-      await deployed.callTx.prove_access();
+      const finalizedProof = await deployed.callTx.prove_access();
+      return bytesToHex(finalizedProof.private.result);
     },
-    registerAllowlist: async (root: string) => {
-      if (root.length !== 64 || !/^[0-9a-fA-F]{64}$/.test(root)) {
-        throw new Error("Allowlist root must be exactly 64 hex characters.");
-      }
+    registerAllowlist: async (
+      root: string,
+      maxPasses = Number(DEFAULT_POLICY_CAPACITY),
+      validUntil = Number(defaultPolicyExpiry()),
+    ) => {
       await deployed.callTx.rotate_policy(
-        BigInt(`0x${root}`),
-        DEFAULT_POLICY_CAPACITY,
-        defaultPolicyExpiry(),
+        hexToField(root),
+        BigInt(maxPasses),
+        BigInt(validUntil),
       );
+    },
+    rotateToFreshPolicy: async (
+      maxPasses = Number(DEFAULT_POLICY_CAPACITY),
+      validUntil = Number(defaultPolicyExpiry()),
+    ) => {
+      const currentState = await privateState.get("veilpass-private-state");
+      if (!currentState) throw new Error("The browser-private policy state is unavailable.");
+      const nextPolicy = createSingleMemberPolicy({ adminSecret: currentState.adminSecret });
+      await deployed.callTx.rotate_policy(nextPolicy.root, BigInt(maxPasses), BigInt(validUntil));
+      await privateState.set("veilpass-private-state", nextPolicy.privateState);
+      return nextPolicy.rootHex;
+    },
+    pausePolicy: async () => {
+      await deployed.callTx.pause_policy();
+    },
+    resumePolicy: async () => {
+      await deployed.callTx.resume_policy();
+    },
+    revokePass: async (passId: string) => {
+      await deployed.callTx.revoke_pass(parsePassId(passId));
+    },
+    validatePass: async (passId: string) => {
+      const validation = await deployed.callTx.validate_pass(parsePassId(passId));
+      return validation.private.result;
     },
   };
 }
