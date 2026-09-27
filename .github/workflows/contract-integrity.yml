@@ -1,0 +1,83 @@
+name: Contract Integrity
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "contracts/**"
+      - "managed/veil-allowlist/**"
+      - "lib/midnight-browser-deploy.ts"
+      - "lib/veilpass-policy.ts"
+      - "scripts/**"
+      - "tests/contract-security.test.mjs"
+      - "tests/policy-utilities.test.mjs"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/contract-integrity.yml"
+  pull_request:
+    paths:
+      - "contracts/**"
+      - "managed/veil-allowlist/**"
+      - "lib/midnight-browser-deploy.ts"
+      - "lib/veilpass-policy.ts"
+      - "scripts/**"
+      - "tests/contract-security.test.mjs"
+      - "tests/policy-utilities.test.mjs"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/contract-integrity.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: contract-integrity-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compact:
+    name: Compile and verify Compact contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.19.0
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Validate security-critical source structure
+        run: npm run check:compact-source
+
+      - name: Install Compact 0.31.1
+        shell: bash
+        run: |
+          curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location \
+            https://github.com/midnightntwrk/compact/releases/latest/download/compact-installer.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/compact" update 0.31.1
+
+      - name: Recompile governed contract
+        run: compact compile contracts/veil-allowlist.compact managed/veil-allowlist
+
+      - name: Synchronize browser proof material
+        run: npm run contracts:sync-browser-assets
+
+      - name: Verify generated ABI and proof assets
+        run: npm run check:contract-artifacts
+
+      - name: Run contract security tests
+        run: |
+          node tests/contract-security.test.mjs
+          node tests/policy-utilities.test.mjs
+
+      - name: Reject stale generated contract code
+        run: git diff --exit-code -- contracts/veil-allowlist.compact managed/veil-allowlist/compiler managed/veil-allowlist/contract
