@@ -10,25 +10,35 @@ VeilPass is a privacy-first allowlist-access dApp built for Midnight. A member c
 
 ## Product proposal
 
-**Private Allowlist Access** — VeilPass is a reusable access layer for invite-only communities, product betas, and events. A host registers an allowlist commitment, while members keep their credential and secret private. The Compact circuit verifies the witness and reveals only a valid or invalid result. Organizers get an auditable access count without turning the allowlist into a public identity directory.
+**Private Allowlist Access** — VeilPass is a governed access layer for invite-only communities, product betas, and events. A host commits a Merkle membership root, capacity, and expiry while members retain their credential, authentication path, and nullifier secret. A successful proof consumes a policy-scoped nullifier and issues a revocable receipt without publishing the member list.
+
+### Governed contract capabilities
+
+- Private Merkle membership proofs against a public policy root.
+- Replay protection through epoch-scoped nullifiers.
+- Domain-separated pass receipts that can be validated or revoked.
+- Enforced issuance capacity and block-time expiry.
+- Administrator-authenticated rotation, pause, resume, transfer, and revocation.
+- Epoch rotation so a new policy does not reuse the previous nullifier domain.
 
 ## Repository contents
 
 - `app/` — responsive VeilPass console with wallet flows, access views, a context-aware copilot, and a four-agent privacy intelligence workspace.
 - `lib/ai/` — privacy-safe AI contracts, secret redaction, score normalization, and a structured Gemini client with timeouts and local fallback support.
-- `contracts/veil-allowlist.compact` — Compact contract with public ledger state, private witnesses, and deliberate `disclose()` use.
+- `contracts/veil-allowlist.compact` — governed Compact access contract with Merkle membership, nullifiers, receipts, capacity, expiry, pause/resume, and revocation.
 - `managed/veil-allowlist/` — generated contract binding, circuits, proving/verifying keys, and ZKIR output. This is the single checked-in source of proof artifacts; the Vercel build copies the required browser assets into `public/` automatically.
 - `public/keys/` and `public/zkir/` — browser-served proof assets for the connected wallet.
-- `tests/rendered-html.test.mjs` — three render and artifact smoke tests.
-- `.github/workflows/ci.yml` — build and test workflow on each push and pull request.
+- `tests/contract-security.test.mjs` — executable assertions for administrative authentication, membership, replay prevention, policy limits, and revocation.
+- `tests/policy-utilities.test.mjs` — deterministic Merkle policy and boundary-validation tests.
+- `.github/workflows/` — separate application CI and reproducible Compact integrity workflows.
 
 ## Privacy model
 
 ### An observer can learn
 
-- The public allowlist commitment (a hash, not a credential).
-- Whether a submitted proof is valid.
-- The number of accepted proofs.
+- The public Merkle root, policy epoch, capacity, expiry, and active/paused state.
+- Used nullifiers and issued/revoked pass IDs, which are domain-separated commitments rather than identities.
+- The number of accepted proofs in the active policy.
 - Public transaction metadata and timestamps.
 
 ### An observer cannot learn
@@ -37,7 +47,7 @@ VeilPass is a privacy-first allowlist-access dApp built for Midnight. A member c
 - Credential issuer or underlying eligibility value.
 - The private witness that satisfied the circuit.
 
-`disclose()` is used only to register the public allowlist root. The member credential commitment and eligibility boolean are private witnesses and are never disclosed.
+The administrator secret, member credential commitment, Merkle authentication path, and nullifier secret are private witnesses. `disclose()` is applied only at the explicit public-state boundary: policy configuration, consumed nullifiers, receipt IDs, and boolean validation results.
 
 ## Local development
 
@@ -91,7 +101,7 @@ The contract compiles as:
 npm run contracts:compile
 ```
 
-Important: PowerShell's `C:\Windows\System32\compact.exe` is file compression, not Midnight Compact. Its output starts with `Listing ...`. A successful Midnight compile says `Compiling 2 circuits` and creates the checked-in `managed/veil-allowlist/compiler`, `contract`, `keys`, and `zkir` directories.
+Important: PowerShell's `C:\Windows\System32\compact.exe` is file compression, not Midnight Compact. Its output starts with `Listing ...`. A successful Midnight compile builds seven provable circuits and creates the checked-in `managed/veil-allowlist/compiler`, `contract`, `keys`, and `zkir` directories.
 
 No Docker is required to run this site, deploy it on Vercel, or deploy through 1AM using the already-generated artifacts. After modifying the Compact source, run the wrapper above; it also syncs keys and ZKIR into `public/` for browser proving. If the wrapper cannot find a Midnight compiler, use a supported Linux environment only to recompile the changed contract source.
 
@@ -105,11 +115,13 @@ npm run contracts:sync-browser-assets
 
 ```bash
 npm run check:compact-source
+npm run check:contract-artifacts
 npm run lint
 npm test
+npm run verify
 ```
 
-`npm test` runs the production build followed by eight tests: four structured AI pipeline checks, one secret-handling copilot check, and three rendering/artifact smoke tests. The GitHub Actions workflow runs the same build and test checks on every push and pull request.
+`npm test` runs contract security assertions, deterministic policy tests, and rendered application smoke tests. `npm run verify` is the local merge gate: lint, source and artifact integrity, production build, and the full test suite. Application CI runs on every push and pull request; Contract Integrity additionally recompiles with Compact 0.31.1 and rejects stale generated bindings.
 
 ## Deploy on Vercel
 
@@ -132,8 +144,9 @@ For a Vercel Preview deployment using 1AM, set `NEXT_PUBLIC_MIDNIGHT_NETWORK_ID=
 4. Fund that wallet with the matching tNIGHT and DUST: [Preview faucet](https://midnight-tmnight-preview.nethermind.dev/) or [Preprod faucet](https://midnight-tmnight-preprod.nethermind.dev/).
 5. In VeilPass, select **Connect wallet**, approve the request for the selected network, then select **Deploy with connected wallet** in the Live contract card.
 6. Keep the tab open while 1AM proves, balances, and submits the transaction. The app displays and copies the full contract address when finalization succeeds.
-7. Select **Generate proof** and then **Run private proof** to submit VeilPass's live `prove_access` circuit from the same wallet session.
-8. Paste the full address below and into Vercel as `NEXT_PUBLIC_MIDNIGHT_CONTRACT_ADDRESS`, then redeploy the frontend.
+7. Use **Host console** to rotate, pause, or resume the governed policy. The constructor already installs the initial valid Merkle policy atomically.
+8. Select **Generate proof** and then **Run private proof** to submit `prove_access`; the result is a pass ID that can be validated or revoked in Host console.
+9. Paste the full address below and into Vercel as `NEXT_PUBLIC_MIDNIGHT_CONTRACT_ADDRESS`, then redeploy the frontend.
 
 The browser deployer uses the selected 1AM wallet's configured proof service where supplied, or 1AM's delegated proving provider. No local proof service or Docker is required for this flow.
 
