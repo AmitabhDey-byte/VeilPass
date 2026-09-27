@@ -47,7 +47,6 @@ export type VeilPassDeployment = {
   transactionId: string;
   transactionHash: string;
   policyRoot: string;
-  initializeDefaultAllowlist: () => Promise<void>;
   proveAccess: () => Promise<string>;
   registerAllowlist: (root: string, maxPasses?: number, validUntil?: number) => Promise<void>;
   rotateToFreshPolicy: (maxPasses?: number, validUntil?: number) => Promise<string>;
@@ -105,8 +104,20 @@ export function describeVeilPassProofError(error: unknown, network: MidnightNetw
   const message = error instanceof Error ? error.message : String(error);
   const normalized = message.toLowerCase();
 
-  if (normalized.includes("custom error: 170") || normalized.includes("invalid transaction: custom error")) {
-    return "The contract rejected this proof because its allowlist root has not been initialized. Register the default 64-zero root in Host console, then try the proof again.";
+  if (normalized.includes("policy is paused")) {
+    return "The host paused this policy. Resume it from Host console before proving access.";
+  }
+  if (normalized.includes("policy has expired")) {
+    return "This access policy has expired. Rotate it with a future expiry before trying again.";
+  }
+  if (normalized.includes("capacity has been reached")) {
+    return "This policy has reached its pass capacity. Rotate the policy to open a new issuance epoch.";
+  }
+  if (normalized.includes("already been consumed")) {
+    return "This credential already issued a pass in the active policy epoch. Rotate the policy before proving it again.";
+  }
+  if (normalized.includes("membership path") || normalized.includes("active allowlist")) {
+    return "The private credential and Merkle path do not match the active policy root.";
   }
   if (normalized.includes("dust") || normalized.includes("insufficient fee")) {
     return `The proof transaction needs spendable DUST. Fund or activate DUST in 1AM ${network}, wait for sync, then retry.`;
@@ -341,8 +352,6 @@ export async function deployVeilPass(
     transactionId: finalized.txId,
     transactionHash: finalized.txHash,
     policyRoot: policy.rootHex,
-    // The constructor now atomically installs the initial governed policy.
-    initializeDefaultAllowlist: async () => undefined,
     proveAccess: async () => {
       const finalizedProof = await deployed.callTx.prove_access();
       return bytesToHex(finalizedProof.private.result);
