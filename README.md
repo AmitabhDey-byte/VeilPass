@@ -156,11 +156,14 @@ The browser deployer uses the selected 1AM wallet's configured proof service whe
 
 ## Deployment record
 
+> **Migration required:** the recorded deployments below predate the governed Merkle/nullifier/receipt contract. They are retained as historical submission evidence and are not compatible with the current client. Follow the [governed redeployment checklist](docs/deployment-migration.md) before setting a production contract address.
+
 - Contract: `veil-allowlist.compact`
 - Preview contract address: `27d31144f351eea606aa7cf1abbb198c87711169c68a919449886e3783e599f1`
 - Preview deployment transaction ID: `00a230e8cec48a7cba1139e2f81efe134341874367628a9b1e067a5d6db5ed808f`
-- Preprod contract address: `1b35e2fcea7b313f7ff1ff7c0af6df34a3f5dedd26a390c7534863727f022309`
-- Preprod deployment transaction ID: `0064d5d9d1378733d20fa79c58f08bdfeb5281e2cab27f574750321210716f744c`
+- Legacy Preprod contract address: `1b35e2fcea7b313f7ff1ff7c0af6df34a3f5dedd26a390c7534863727f022309`
+- Legacy Preprod deployment transaction ID: `0064d5d9d1378733d20fa79c58f08bdfeb5281e2cab27f574750321210716f744c`
+- Legacy Preprod deployment time: July 27, 2026 at 10:36 UTC
 - Managed output: `managed/veil-allowlist/`
 
 Vercel hosts the frontend; it does not create a Midnight contract by itself. Do not replace either address with a shortened or invented value. Only insert the complete address shown after a successful wallet deployment.
