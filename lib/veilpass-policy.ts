@@ -2,6 +2,7 @@ import {
   CompactTypeBytes,
   CompactTypeMerkleTreeDigest,
   CompactTypeMerkleTreePath,
+  maxField,
   StateBoundedMerkleTree,
 } from "@midnight-ntwrk/compact-runtime";
 
@@ -42,6 +43,24 @@ export function bytesToHex(value: Uint8Array): string {
 
 export function fieldToHex(value: bigint): string {
   return value.toString(16).padStart(64, "0");
+}
+
+export function hexToField(value: string): bigint {
+  if (!/^[0-9a-fA-F]{64}$/.test(value)) {
+    throw new Error("Allowlist root must be exactly 64 hexadecimal characters.");
+  }
+  const field = BigInt(`0x${value}`);
+  if (field > maxField()) {
+    throw new Error("Allowlist root is outside the Midnight field range.");
+  }
+  return field;
+}
+
+export function parsePassId(value: string): Uint8Array {
+  if (!/^[0-9a-fA-F]{64}$/.test(value)) {
+    throw new Error("Pass ID must be exactly 64 hexadecimal characters.");
+  }
+  return Uint8Array.from(value.match(/.{2}/g) ?? [], (pair) => Number.parseInt(pair, 16));
 }
 
 /**
