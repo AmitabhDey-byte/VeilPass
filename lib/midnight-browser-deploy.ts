@@ -1,6 +1,12 @@
 import type { ConnectedAPI } from "@midnight-ntwrk/dapp-connector-api";
 import type { ContractAddress, SigningKey } from "@midnight-ntwrk/compact-runtime";
 import "./browser-polyfills";
+import {
+  createSingleMemberPolicy,
+  defaultPolicyExpiry,
+  DEFAULT_POLICY_CAPACITY,
+  type VeilPassPrivateState,
+} from "./veilpass-policy";
 import type {
   ExportPrivateStatesOptions,
   ImportPrivateStatesOptions,
@@ -11,11 +17,6 @@ import type {
   MidnightProviders,
   WalletProvider,
 } from "@midnight-ntwrk/midnight-js/types";
-
-type VeilPassPrivateState = {
-  credentialCommitment: Uint8Array;
-  isEligible: boolean;
-};
 
 type FinalizedDeployment = {
   deployTxData: {
@@ -28,7 +29,7 @@ type FinalizedDeployment = {
   };
   callTx: {
     prove_access(): Promise<void>;
-    register_allowlist_root(root: Uint8Array): Promise<void>;
+    rotate_policy(root: bigint, maxPasses: bigint, validUntil: bigint): Promise<void>;
   };
 };
 
@@ -36,6 +37,7 @@ export type VeilPassDeployment = {
   contractAddress: string;
   transactionId: string;
   transactionHash: string;
+  policyRoot: string;
   initializeDefaultAllowlist: () => Promise<void>;
   proveAccess: () => Promise<void>;
   registerAllowlist: (root: string) => Promise<void>;
@@ -243,13 +245,25 @@ export async function deployVeilPass(
   );
 
   const privateState = new EphemeralPrivateStateProvider();
+  const policy = createSingleMemberPolicy();
   const compiledContract = CompiledContract.make("veil-allowlist", generatedContract.Contract).pipe(
     CompiledContract.withWitnesses({
+      private_admin_secret: (context: { privateState: VeilPassPrivateState }) => [
+        context.privateState,
+        context.privateState.adminSecret,
+      ],
       private_credential_commitment: (context: { privateState: VeilPassPrivateState }) => [
         context.privateState,
         context.privateState.credentialCommitment,
       ],
-      private_is_eligible: (context: { privateState: VeilPassPrivateState }) => [context.privateState, context.privateState.isEligible],
+      private_membership_path: (context: { privateState: VeilPassPrivateState }) => [
+        context.privateState,
+        context.privateState.membershipPath,
+      ],
+      private_nullifier_secret: (context: { privateState: VeilPassPrivateState }) => [
+        context.privateState,
+        context.privateState.nullifierSecret,
+      ],
     }),
   );
 
@@ -292,11 +306,14 @@ export async function deployVeilPass(
     providers,
     {
       compiledContract,
+      args: [
+        policy.privateState.adminSecret,
+        policy.root,
+        DEFAULT_POLICY_CAPACITY,
+        defaultPolicyExpiry(),
+      ],
       privateStateId: "veilpass-private-state",
-      initialPrivateState: {
-        credentialCommitment: new Uint8Array(32),
-        isEligible: true,
-      },
+      initialPrivateState: policy.privateState,
     },
   );
 
@@ -309,12 +326,9 @@ export async function deployVeilPass(
     contractAddress: deployed.deployTxData.public.contractAddress,
     transactionId: finalized.txId,
     transactionHash: finalized.txHash,
-    initializeDefaultAllowlist: async () => {
-      // The Compact ledger cell is empty immediately after deployment. Publish
-      // the same zero commitment used by the browser's private witness before
-      // accepting the first proof. This is a real on-chain contract call.
-      await deployed.callTx.register_allowlist_root(new Uint8Array(32));
-    },
+    policyRoot: policy.rootHex,
+    // The constructor now atomically installs the initial governed policy.
+    initializeDefaultAllowlist: async () => undefined,
     proveAccess: async () => {
       await deployed.callTx.prove_access();
     },
@@ -322,15 +336,11 @@ export async function deployVeilPass(
       if (root.length !== 64 || !/^[0-9a-fA-F]{64}$/.test(root)) {
         throw new Error("Allowlist root must be exactly 64 hex characters.");
       }
-      const bytes = new Uint8Array(32);
-      for (let i = 0; i < 32; i += 1) {
-        bytes[i] = parseInt(root.slice(i * 2, i * 2 + 2), 16);
-      }
-      await deployed.callTx.register_allowlist_root(bytes);
-      await privateState.set("veilpass-private-state", {
-        credentialCommitment: bytes,
-        isEligible: true,
-      });
+      await deployed.callTx.rotate_policy(
+        BigInt(`0x${root}`),
+        DEFAULT_POLICY_CAPACITY,
+        defaultPolicyExpiry(),
+      );
     },
   };
 }
