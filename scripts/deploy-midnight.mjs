@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { randomBytes } from 'node:crypto';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { Buffer } from 'node:buffer';
 
@@ -8,6 +9,12 @@ import { WebSocket } from 'ws';
 
 import * as ledger from '@midnight-ntwrk/ledger-v8';
 import { CompiledContract } from '@midnight-ntwrk/compact-js';
+import {
+  CompactTypeBytes,
+  CompactTypeMerkleTreeDigest,
+  CompactTypeMerkleTreePath,
+  StateBoundedMerkleTree,
+} from '@midnight-ntwrk/compact-runtime';
 import { deployContract } from '@midnight-ntwrk/midnight-js/contracts';
 import { setNetworkId, getNetworkId } from '@midnight-ntwrk/midnight-js/network-id';
 import { httpClientProofProvider } from '@midnight-ntwrk/midnight-js-http-client-proof-provider';
@@ -80,11 +87,37 @@ setNetworkId(network);
 const generatedContract = await import(pathToFileURL(generatedContractPath).href);
 const compiledContract = CompiledContract.make('veil-allowlist', generatedContract.Contract).pipe(
   CompiledContract.withWitnesses({
+    private_admin_secret: (context) => [context.privateState, context.privateState.adminSecret],
     private_credential_commitment: (context) => [context.privateState, context.privateState.credentialCommitment],
-    private_is_eligible: (context) => [context.privateState, context.privateState.isEligible],
+    private_membership_path: (context) => [context.privateState, context.privateState.membershipPath],
+    private_nullifier_secret: (context) => [context.privateState, context.privateState.nullifierSecret],
   }),
   CompiledContract.withCompiledFileAssets(zkConfigPath),
 );
+
+function createDeploymentPolicy() {
+  const bytes32 = new CompactTypeBytes(32);
+  const credentialCommitment = new Uint8Array(randomBytes(32));
+  const alignedLeaf = {
+    value: bytes32.toValue(credentialCommitment),
+    alignment: bytes32.alignment(),
+  };
+  const tree = new StateBoundedMerkleTree(20).update(0n, alignedLeaf).rehash();
+  const rootValue = tree.root();
+  if (!rootValue) throw new Error('Could not derive the initial allowlist root.');
+
+  return {
+    root: CompactTypeMerkleTreeDigest.fromValue(structuredClone(rootValue.value)).field,
+    privateState: {
+      adminSecret: new Uint8Array(randomBytes(32)),
+      credentialCommitment,
+      membershipPath: new CompactTypeMerkleTreePath(20, bytes32).fromValue(
+        structuredClone(tree.pathForLeaf(0n, alignedLeaf).value),
+      ),
+      nullifierSecret: new Uint8Array(randomBytes(32)),
+    },
+  };
+}
 
 function readLocalState() {
   if (!fs.existsSync(localStatePath)) return { deployments: {} };
@@ -340,13 +373,17 @@ try {
 
   console.log('Deploying VeilPass contract. Keep this terminal open...');
   const providers = await createProviders(walletContext, config);
+  const policy = createDeploymentPolicy();
   const deployed = await deployContract(providers, {
     compiledContract,
+    args: [
+      policy.privateState.adminSecret,
+      policy.root,
+      500n,
+      BigInt(Date.now() + 30 * 24 * 60 * 60 * 1000),
+    ],
     privateStateId: 'veilpass-private-state',
-    initialPrivateState: {
-      credentialCommitment: new Uint8Array(32),
-      isEligible: true,
-    },
+    initialPrivateState: policy.privateState,
   });
 
   const contractAddress = deployed.deployTxData.public.contractAddress;
