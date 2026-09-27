@@ -52,7 +52,9 @@ for (const file of requiredFiles) {
 
 const bindings = await readFile(path.join(managedRoot, "contract", "index.d.ts"), "utf8");
 const missingCircuits = provableCircuits.filter((circuit) => !bindings.includes(`${circuit}(`));
-const missingFields = requiredLedgerFields.filter((field) => !bindings.includes(`readonly ${field}`));
+const missingFields = requiredLedgerFields.filter((field) =>
+  !bindings.includes(`readonly ${field}`) && !bindings.includes(`  ${field}:`),
+);
 
 if (missingCircuits.length || missingFields.length) {
   throw new Error([

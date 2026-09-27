@@ -4,12 +4,148 @@
   "runtime-version": "0.16.0",
   "circuits": [
     {
-      "name": "register_allowlist_root",
+      "name": "derive_admin_key",
+      "pure": true,
+      "proof": false,
+      "arguments": [
+        {
+          "name": "secret",
+          "type": {
+            "type-name": "Bytes",
+            "length": 32
+          }
+        }
+      ],
+      "result-type": {
+        "type-name": "Bytes",
+        "length": 32
+      }
+    },
+    {
+      "name": "derive_nullifier",
+      "pure": true,
+      "proof": false,
+      "arguments": [
+        {
+          "name": "root",
+          "type": {
+            "type-name": "Field"
+          }
+        },
+        {
+          "name": "epoch",
+          "type": {
+            "type-name": "Uint",
+            "maxval": 18446744073709551615
+          }
+        },
+        {
+          "name": "secret",
+          "type": {
+            "type-name": "Bytes",
+            "length": 32
+          }
+        }
+      ],
+      "result-type": {
+        "type-name": "Bytes",
+        "length": 32
+      }
+    },
+    {
+      "name": "derive_pass_id",
+      "pure": true,
+      "proof": false,
+      "arguments": [
+        {
+          "name": "root",
+          "type": {
+            "type-name": "Field"
+          }
+        },
+        {
+          "name": "epoch",
+          "type": {
+            "type-name": "Uint",
+            "maxval": 18446744073709551615
+          }
+        },
+        {
+          "name": "nullifier",
+          "type": {
+            "type-name": "Bytes",
+            "length": 32
+          }
+        }
+      ],
+      "result-type": {
+        "type-name": "Bytes",
+        "length": 32
+      }
+    },
+    {
+      "name": "rotate_policy",
       "pure": false,
       "proof": true,
       "arguments": [
         {
-          "name": "root",
+          "name": "new_allowlist_root",
+          "type": {
+            "type-name": "Field"
+          }
+        },
+        {
+          "name": "new_max_passes",
+          "type": {
+            "type-name": "Uint",
+            "maxval": 18446744073709551615
+          }
+        },
+        {
+          "name": "new_valid_until",
+          "type": {
+            "type-name": "Uint",
+            "maxval": 18446744073709551615
+          }
+        }
+      ],
+      "result-type": {
+        "type-name": "Tuple",
+        "types": [
+        ]
+      }
+    },
+    {
+      "name": "pause_policy",
+      "pure": false,
+      "proof": true,
+      "arguments": [
+      ],
+      "result-type": {
+        "type-name": "Tuple",
+        "types": [
+        ]
+      }
+    },
+    {
+      "name": "resume_policy",
+      "pure": false,
+      "proof": true,
+      "arguments": [
+      ],
+      "result-type": {
+        "type-name": "Tuple",
+        "types": [
+        ]
+      }
+    },
+    {
+      "name": "transfer_admin",
+      "pure": false,
+      "proof": true,
+      "arguments": [
+        {
+          "name": "new_admin_secret",
           "type": {
             "type-name": "Bytes",
             "length": 32
@@ -29,13 +165,57 @@
       "arguments": [
       ],
       "result-type": {
+        "type-name": "Bytes",
+        "length": 32
+      }
+    },
+    {
+      "name": "revoke_pass",
+      "pure": false,
+      "proof": true,
+      "arguments": [
+        {
+          "name": "pass_id",
+          "type": {
+            "type-name": "Bytes",
+            "length": 32
+          }
+        }
+      ],
+      "result-type": {
         "type-name": "Tuple",
         "types": [
         ]
       }
+    },
+    {
+      "name": "validate_pass",
+      "pure": false,
+      "proof": true,
+      "arguments": [
+        {
+          "name": "pass_id",
+          "type": {
+            "type-name": "Bytes",
+            "length": 32
+          }
+        }
+      ],
+      "result-type": {
+        "type-name": "Boolean"
+      }
     }
   ],
   "witnesses": [
+    {
+      "name": "private_admin_secret",
+      "arguments": [
+      ],
+      "result type": {
+        "type-name": "Bytes",
+        "length": 32
+      }
+    },
     {
       "name": "private_credential_commitment",
       "arguments": [
@@ -46,11 +226,64 @@
       }
     },
     {
-      "name": "private_is_eligible",
+      "name": "private_membership_path",
       "arguments": [
       ],
       "result type": {
-        "type-name": "Boolean"
+        "type-name": "Struct",
+        "name": "MerkleTreePath",
+        "elements": [
+          {
+            "name": "leaf",
+            "type": {
+              "type-name": "Bytes",
+              "length": 32
+            }
+          },
+          {
+            "name": "path",
+            "type": {
+              "type-name": "Vector",
+              "length": 20,
+              "type": {
+                "type-name": "Struct",
+                "name": "MerkleTreePathEntry",
+                "elements": [
+                  {
+                    "name": "sibling",
+                    "type": {
+                      "type-name": "Struct",
+                      "name": "MerkleTreeDigest",
+                      "elements": [
+                        {
+                          "name": "field",
+                          "type": {
+                            "type-name": "Field"
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "name": "goes_left",
+                    "type": {
+                      "type-name": "Boolean"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "private_nullifier_secret",
+      "arguments": [
+      ],
+      "result type": {
+        "type-name": "Bytes",
+        "length": 32
       }
     }
   ],
@@ -58,7 +291,7 @@
   ],
   "ledger": [
     {
-      "name": "allowlist_root",
+      "name": "admin_key",
       "index": 0,
       "exported": true,
       "storage": "Cell",
@@ -68,10 +301,89 @@
       }
     },
     {
-      "name": "verified_passes",
+      "name": "allowlist_root",
       "index": 1,
       "exported": true,
+      "storage": "Cell",
+      "type": {
+        "type-name": "Field"
+      }
+    },
+    {
+      "name": "policy_state",
+      "index": 2,
+      "exported": true,
+      "storage": "Cell",
+      "type": {
+        "type-name": "Enum",
+        "name": "PolicyState",
+        "elements": [
+          "ACTIVE",
+          "PAUSED"
+        ]
+      }
+    },
+    {
+      "name": "policy_epoch",
+      "index": 3,
+      "exported": true,
       "storage": "Counter"
+    },
+    {
+      "name": "max_passes",
+      "index": 4,
+      "exported": true,
+      "storage": "Cell",
+      "type": {
+        "type-name": "Uint",
+        "maxval": 18446744073709551615
+      }
+    },
+    {
+      "name": "valid_until",
+      "index": 5,
+      "exported": true,
+      "storage": "Cell",
+      "type": {
+        "type-name": "Uint",
+        "maxval": 18446744073709551615
+      }
+    },
+    {
+      "name": "verified_passes",
+      "index": 6,
+      "exported": true,
+      "storage": "Counter"
+    },
+    {
+      "name": "used_nullifiers",
+      "index": 7,
+      "exported": true,
+      "storage": "Set",
+      "type": {
+        "type-name": "Bytes",
+        "length": 32
+      }
+    },
+    {
+      "name": "issued_passes",
+      "index": 8,
+      "exported": true,
+      "storage": "Set",
+      "type": {
+        "type-name": "Bytes",
+        "length": 32
+      }
+    },
+    {
+      "name": "revoked_passes",
+      "index": 9,
+      "exported": true,
+      "storage": "Set",
+      "type": {
+        "type-name": "Bytes",
+        "length": 32
+      }
     }
   ]
 }
