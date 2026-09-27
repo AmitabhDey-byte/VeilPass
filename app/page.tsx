@@ -66,13 +66,6 @@ function shortAddress(address: string) {
   return address.length > 18 ? `${address.slice(0, 9)}…${address.slice(-7)}` : address;
 }
 
-function randomHex(bytes: number) {
-  if (typeof window === "undefined") return "0".repeat(bytes * 2);
-  const buffer = new Uint8Array(bytes);
-  window.crypto.getRandomValues(buffer);
-  return Array.from(buffer, (byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
 function formatTime(date: Date) {
   return date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
 }
@@ -112,7 +105,10 @@ export default function Home() {
   const [deploymentTransactionIds, setDeploymentTransactionIds] = useState<Partial<Record<Network, string>>>({});
   const [deploymentBusy, setDeploymentBusy] = useState(false);
   const [proofBusy, setProofBusy] = useState(false);
-  const [allowlistRegistrationBusy, setAllowlistRegistrationBusy] = useState(false);
+  const [policyActionBusy, setPolicyActionBusy] = useState(false);
+  const [policyPaused, setPolicyPaused] = useState(false);
+  const [policyCapacity, setPolicyCapacity] = useState(500);
+  const [policyLifetimeDays, setPolicyLifetimeDays] = useState(30);
   const [allowlistRoot, setAllowlistRoot] = useState("");
   const [allowlistName, setAllowlistName] = useState("Founders Circle · Cohort 04");
   const [issuedPassId, setIssuedPassId] = useState("");
@@ -122,7 +118,6 @@ export default function Home() {
   const [userCredentials, setUserCredentials] = useState<typeof CREDENTIAL_LIBRARY>([CREDENTIAL_LIBRARY[0]]);
   const [showCredentialImport, setShowCredentialImport] = useState(false);
   const deployedProofRef = useRef<(() => Promise<string>) | null>(null);
-  const registerAllowlistRef = useRef<((root: string) => Promise<void>) | null>(null);
   const policyControlsRef = useRef<Pick<VeilPassDeployment, "rotateToFreshPolicy" | "pausePolicy" | "resumePolicy" | "revokePass" | "validatePass"> | null>(null);
   const [verified, setVerified] = useState(false);
   const [showProof, setShowProof] = useState(false);
@@ -167,7 +162,7 @@ export default function Home() {
 
   async function connectWallet(networkId: Network = selectedNetwork, forceConnect = false): Promise<ConnectedAPI | null> {
     if (connected && !forceConnect) {
-      setWalletApi(null); deployedProofRef.current = null; registerAllowlistRef.current = null; policyControlsRef.current = null;
+      setWalletApi(null); deployedProofRef.current = null; policyControlsRef.current = null;
       setWalletAddress(""); setWalletName(""); setWalletNetwork(""); setWalletError(""); setConnected(false);
       pushNotice("Wallet disconnected");
       return null;
@@ -228,7 +223,6 @@ export default function Home() {
       const { deployVeilPass } = await import("@/lib/midnight-browser-deploy");
       const deployment = await deployVeilPass(api, network);
       deployedProofRef.current = deployment.proveAccess;
-      registerAllowlistRef.current = deployment.registerAllowlist;
       policyControlsRef.current = deployment;
       setContractAddresses((current) => ({ ...current, [network]: deployment.contractAddress }));
       setDeploymentTransactionIds((current) => ({ ...current, [network]: deployment.transactionId }));
@@ -242,24 +236,51 @@ export default function Home() {
     } finally { setDeploymentBusy(false); }
   }
 
-  async function registerAllowlistRoot() {
-    if (!/^[0-9a-fA-F]{64}$/.test(allowlistRoot)) { pushNotice("Allowlist root must be 64 hex characters (32 bytes)."); return; }
-    const api = walletApi ?? await connectWallet();
-    if (!api) return;
-    if (!registerAllowlistRef.current) { pushNotice(`Deploy on ${NETWORK_LABEL[selectedNetwork]} in this browser session before publishing an allowlist root.`); return; }
-    setAllowlistRegistrationBusy(true); setWalletError("");
+  async function rotateFreshPolicy() {
+    if (!policyControlsRef.current) { pushNotice(`Deploy on ${NETWORK_LABEL[selectedNetwork]} before rotating the policy.`); return; }
+    if (!Number.isInteger(policyCapacity) || policyCapacity < 1 || policyCapacity > 100_000) { pushNotice("Capacity must be between 1 and 100,000 passes."); return; }
+    if (!Number.isInteger(policyLifetimeDays) || policyLifetimeDays < 1 || policyLifetimeDays > 365) { pushNotice("Policy lifetime must be between 1 and 365 days."); return; }
+    setPolicyActionBusy(true); setWalletError("");
     try {
-      await registerAllowlistRef.current(allowlistRoot);
-      recordActivity({ commitment: `0x${allowlistRoot.slice(0, 6)}…${allowlistRoot.slice(-4)}`, type: "Allowlist registration", state: "Verified" });
-      pushNotice(`Allowlist root registered for ${allowlistName}.`);
-    } catch (error) {
-      setWalletError(error instanceof Error ? error.message : "Allowlist registration failed."); pushNotice("Allowlist registration was rejected");
-    } finally { setAllowlistRegistrationBusy(false); }
+      const validUntil = Date.now() + policyLifetimeDays * 24 * 60 * 60 * 1_000;
+      const root = await policyControlsRef.current.rotateToFreshPolicy(policyCapacity, validUntil);
+      setAllowlistRoot(root); setPolicyPaused(false);
+      recordActivity({ commitment: `0x${root.slice(0, 6)}…${root.slice(-4)}`, type: "Allowlist registration", state: "Verified" });
+      pushNotice(`Policy rotated with capacity ${policyCapacity} and a ${policyLifetimeDays}-day lifetime.`);
+    } catch (error) { setWalletError(error instanceof Error ? error.message : "Policy rotation failed."); }
+    finally { setPolicyActionBusy(false); }
+  }
+
+  async function togglePolicy() {
+    if (!policyControlsRef.current) { pushNotice("Deploy this contract in the current browser session first."); return; }
+    setPolicyActionBusy(true); setWalletError("");
+    try {
+      if (policyPaused) await policyControlsRef.current.resumePolicy();
+      else await policyControlsRef.current.pausePolicy();
+      setPolicyPaused(!policyPaused); pushNotice(`Policy ${policyPaused ? "resumed" : "paused"} on chain.`);
+    } catch (error) { setWalletError(error instanceof Error ? error.message : "Policy state change failed."); }
+    finally { setPolicyActionBusy(false); }
+  }
+
+  async function inspectLatestPass(action: "validate" | "revoke") {
+    if (!issuedPassId || !policyControlsRef.current) { pushNotice("Issue a pass in this browser session first."); return; }
+    setPolicyActionBusy(true); setWalletError("");
+    try {
+      if (action === "revoke") {
+        await policyControlsRef.current.revokePass(issuedPassId); setVerified(false);
+        recordActivity({ commitment: `0x${issuedPassId.slice(0, 6)}…${issuedPassId.slice(-4)}`, type: "Access pass", state: "Expired" });
+        pushNotice("Latest pass revoked on chain.");
+      } else {
+        const valid = await policyControlsRef.current.validatePass(issuedPassId);
+        pushNotice(valid ? "Latest pass is active and valid." : "Latest pass is not valid.");
+      }
+    } catch (error) { setWalletError(error instanceof Error ? error.message : "Pass operation failed."); }
+    finally { setPolicyActionBusy(false); }
   }
 
   function switchNetwork(network: Network) {
     if (network === selectedNetwork) return;
-    setSelectedNetwork(network); setWalletApi(null); deployedProofRef.current = null; registerAllowlistRef.current = null; policyControlsRef.current = null;
+    setSelectedNetwork(network); setWalletApi(null); deployedProofRef.current = null; policyControlsRef.current = null;
     setWalletAddress(""); setWalletName(""); setWalletNetwork(""); setWalletError(""); setConnected(false); setVerified(false); setIssuedPassId("");
     pushNotice(`Switched to ${NETWORK_LABEL[network]}. Reconnect 1AM to continue.`);
   }
@@ -309,7 +330,7 @@ export default function Home() {
 
   const healthView = <section className="view-page"><PageIntro eyebrow="Network health" title={<>A calm check before<br /><em>you make a claim.</em></>}>VeilPass reads the selected wallet configuration at connection time. This page makes the requirements visible before any transaction begins.</PageIntro><div className="health-grid"><HealthCard title="Wallet" value={connected ? "Ready" : "Needs connection"} detail={connected ? `${walletName || MIDNIGHT_WALLET_HINT} · ${shortAddress(walletAddress)}` : `Connect 1AM on ${NETWORK_LABEL[selectedNetwork]}.`} ready={connected} action={!connected ? <button className="secondary-button" onClick={() => connectWallet()} type="button">Connect 1AM →</button> : undefined} /><HealthCard title="Selected network" value={NETWORK_LABEL[selectedNetwork]} detail="The wallet must match this network before a proof or deployment can start." ready={connected && walletNetwork === selectedNetwork} action={<a className="text-button" href={NETWORK_FAUCET[selectedNetwork]} target="_blank" rel="noreferrer">Get tNIGHT + DUST ↗</a>} /><HealthCard title="Proof service" value="Wallet managed" detail="1AM supplies the configured proving provider and indexer endpoints; Vercel does not host a proof server." ready={connected} /><HealthCard title="Contract session" value={deployed ? "Address available" : "Not deployed"} detail={deployed ? shortAddress(contractAddress) : `Deploy a real contract on ${NETWORK_LABEL[selectedNetwork]} when your wallet has DUST.`} ready={deployed} action={!deployed ? <button className="secondary-button" type="button" onClick={deploySelectedNetwork} disabled={deploymentBusy}>{deploymentBusy ? "Deploying…" : `Deploy to ${NETWORK_LABEL[selectedNetwork]} →`}</button> : undefined} /></div></section>;
 
-  const hostView = <section className="view-page"><PageIntro eyebrow="Host console" title={<>Publish a private<br /><em>allowlist root.</em></>}>Hosts disclose a 32-byte commitment—not a member list. Each member later proves eligibility using a private witness.</PageIntro><div className="host-grid"><article className="host-card"><span className="section-kicker">Allowlist metadata</span><h2>Define the room</h2><label>Allowlist name<input value={allowlistName} onChange={(event) => setAllowlistName(event.target.value)} placeholder="Cohort name" /></label><label>32-byte commitment<textarea value={allowlistRoot} onChange={(event) => setAllowlistRoot(event.target.value.replace(/[^0-9a-fA-F]/g, "").slice(0, 64))} placeholder="64 hex characters" rows={3} spellCheck={false} /><small>{allowlistRoot.length} / 64 hex characters</small></label><div><button className="secondary-button" type="button" onClick={() => setAllowlistRoot(randomHex(32))}>Generate root</button><button className="primary-button" type="button" onClick={registerAllowlistRoot} disabled={allowlistRegistrationBusy}>{allowlistRegistrationBusy ? "Registering…" : "Register root"} →</button></div></article><article className="host-card"><span className="section-kicker">The public / private split</span><h2>One public call. Many private proofs.</h2><ol><li><b>01</b><p><strong>Compute the commitment</strong>Hash accepted credentials into a 32-byte root.</p></li><li><b>02</b><p><strong>Register the root</strong><code>disclose()</code> publishes the root and nothing else.</p></li><li><b>03</b><p><strong>Let members prove privately</strong>Each witness is evaluated locally by the ZK circuit.</p></li></ol></article><article className="host-card deployment-card"><span className="section-kicker">Current network</span><h2>{NETWORK_LABEL[selectedNetwork]}</h2><strong>{deployed ? shortAddress(contractAddress) : "No session contract"}</strong><p>{deployed ? "The displayed address is copyable from the Overview card. Browser-private state remains only in this session." : "Connect 1AM, fund DUST, then use the real deploy action."}</p><button className="primary-button" type="button" onClick={deploySelectedNetwork} disabled={deploymentBusy}>{deploymentBusy ? "Deploying…" : `Deploy to ${NETWORK_LABEL[selectedNetwork]}`} →</button></article></div></section>;
+  const hostView = <section className="view-page"><PageIntro eyebrow="Host console" title={<>Govern a private<br /><em>access policy.</em></>}>Rotate Merkle membership, enforce capacity and expiry, pause issuance, and revoke receipts without publishing the member list.</PageIntro><div className="host-grid"><article className="host-card"><span className="section-kicker">Policy controls</span><h2>Define the room</h2><label>Policy name<input value={allowlistName} onChange={(event) => setAllowlistName(event.target.value)} placeholder="Cohort name" /></label><label>Merkle root<textarea value={allowlistRoot} readOnly placeholder="Deploy or stage a policy root" rows={3} spellCheck={false} /><small>{allowlistRoot.length} / 64 hex characters · public commitment</small></label><div className="policy-fields"><label>Pass capacity<input type="number" min="1" max="100000" value={policyCapacity} onChange={(event) => setPolicyCapacity(Number(event.target.value))} /></label><label>Lifetime (days)<input type="number" min="1" max="365" value={policyLifetimeDays} onChange={(event) => setPolicyLifetimeDays(Number(event.target.value))} /></label></div><div><button className="secondary-button" type="button" onClick={togglePolicy} disabled={policyActionBusy || !deployed}>{policyPaused ? "Resume policy" : "Pause policy"}</button><button className="primary-button" type="button" onClick={rotateFreshPolicy} disabled={policyActionBusy || !deployed}>{policyActionBusy ? "Finalizing…" : "Rotate policy"} →</button></div></article><article className="host-card"><span className="section-kicker">Pass operations</span><h2>Receipts with consequences.</h2><p className="host-copy">Every accepted proof creates a domain-separated pass ID. Hosts can validate it against issued and revoked sets, or revoke it permanently.</p><code className="host-pass-id">{issuedPassId || "Issue a pass to reveal its receipt ID"}</code><div><button className="secondary-button" type="button" onClick={() => inspectLatestPass("validate")} disabled={!issuedPassId || policyActionBusy}>Validate pass</button><button className="primary-button danger-button" type="button" onClick={() => inspectLatestPass("revoke")} disabled={!issuedPassId || policyActionBusy}>Revoke pass</button></div></article><article className="host-card deployment-card"><span className="section-kicker">Current network</span><h2>{NETWORK_LABEL[selectedNetwork]}</h2><strong>{deployed ? shortAddress(contractAddress) : "No session contract"}</strong><p>{deployed ? `${policyPaused ? "Paused" : "Active"} policy · capacity ${policyCapacity} · browser-private admin key.` : "Connect 1AM, fund DUST, then use the real deploy action."}</p><button className="primary-button" type="button" onClick={deploySelectedNetwork} disabled={deploymentBusy}>{deploymentBusy ? "Deploying…" : `Deploy to ${NETWORK_LABEL[selectedNetwork]}`} →</button></article></div></section>;
 
   const currentView = activeNav === "Overview" ? overview : activeNav === "Passport" ? passportView : activeNav === "Access passes" ? passesView : activeNav === "Privacy intelligence" ? intelligenceView : activeNav === "Credentials" ? credentialsView : activeNav === "Activity" ? activityView : activeNav === "Network health" ? healthView : hostView;
   const pageTransition = reducedMotion ? {} : { initial: { opacity: 0, y: 14 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: -8 }, transition: { duration: 0.28 } };
@@ -317,7 +338,7 @@ export default function Home() {
   return <div className="app-shell">
     <div className="fuji-horizon" aria-hidden="true"><i /><i /><i /></div>
     <motion.aside className="sidebar" initial={reducedMotion ? undefined : { opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.5 }}><div className="brand-lockup"><div className="brand-mark" aria-hidden="true" /><div><strong>VeilPass</strong><span>Private allowlist</span></div></div><span className="workspace-label">Workspace</span><nav className="primary-nav">{navItems.filter((item) => item.group === "workspace").map((item) => <button className={activeNav === item.label ? "active" : ""} key={item.label} onClick={() => openView(item.label)} type="button"><i>{item.icon}</i>{item.label}{item.label === "Access passes" && <b>04</b>}</button>)}</nav><span className="workspace-label vault-label">Vault & operations</span><nav className="primary-nav">{navItems.filter((item) => item.group === "vault").map((item) => <button className={activeNav === item.label ? "active" : ""} key={item.label} onClick={() => openView(item.label)} type="button"><i>{item.icon}</i>{item.label}</button>)}</nav><div className="sidebar-bottom"><div className="network-card"><span><i />Network ready</span><strong>{NETWORK_LABEL[selectedNetwork]}</strong><a href={NETWORK_FAUCET[selectedNetwork]} target="_blank" rel="noreferrer">tNIGHT + DUST faucet ↗</a></div><button className="wallet-mini" type="button" onClick={() => connectWallet()}><span>{connected ? "●" : "○"}</span><div><strong>{connected ? walletName || MIDNIGHT_WALLET_HINT : "Connect 1AM"}</strong><small>{connected ? shortAddress(walletAddress) : "Wallet not connected"}</small></div></button></div></motion.aside>
-    <main className="main-content"><header className="topbar"><div className="breadcrumb">Workspace <i>/</i><strong>{activeNav}</strong></div><div className="topbar-actions"><div className="network-toggle" role="group" aria-label="Midnight network"><button className={selectedNetwork === "preview" ? "active" : ""} onClick={() => switchNetwork("preview")} type="button">Preview</button><button className={selectedNetwork === "preprod" ? "active" : ""} onClick={() => switchNetwork("preprod")} type="button">Preprod</button></div><button className="assistant-button" type="button" onClick={() => setShowAssistant(true)} aria-label="Open assistant">✦</button><button className={`wallet-button ${connected ? "connected" : ""}`} onClick={() => connectWallet()} type="button"><i />{connected ? shortAddress(walletAddress) : "Connect wallet"}</button></div></header><div className="wallet-status-area"><AnimatePresence>{walletBusy && <StatusBanner key="wallet" title={`Connecting ${MIDNIGHT_WALLET_HINT}…`} detail="Approve the request in your wallet." />}{deploymentBusy && <StatusBanner key="deploy" title={`Deploying to ${NETWORK_LABEL[selectedNetwork]}…`} detail="1AM is building and submitting the real contract transaction." />}{allowlistRegistrationBusy && <StatusBanner key="root" title="Registering allowlist root…" detail="Publishing the selected commitment on chain." />}{walletError && <StatusBanner key="error" title="Wallet action needs attention" detail={walletError} error />}</AnimatePresence></div><div className="page-content"><AnimatePresence mode="wait"><motion.div key={activeNav} {...pageTransition}>{currentView}</motion.div></AnimatePresence></div><footer className="site-footer"><span>VeilPass · a Midnight privacy prototype</span><button type="button" onClick={() => setShowPrivacy(true)}>How privacy works →</button></footer></main>
+    <main className="main-content"><header className="topbar"><div className="breadcrumb">Workspace <i>/</i><strong>{activeNav}</strong></div><div className="topbar-actions"><div className="network-toggle" role="group" aria-label="Midnight network"><button className={selectedNetwork === "preview" ? "active" : ""} onClick={() => switchNetwork("preview")} type="button">Preview</button><button className={selectedNetwork === "preprod" ? "active" : ""} onClick={() => switchNetwork("preprod")} type="button">Preprod</button></div><button className="assistant-button" type="button" onClick={() => setShowAssistant(true)} aria-label="Open assistant">✦</button><button className={`wallet-button ${connected ? "connected" : ""}`} onClick={() => connectWallet()} type="button"><i />{connected ? shortAddress(walletAddress) : "Connect wallet"}</button></div></header><div className="wallet-status-area"><AnimatePresence>{walletBusy && <StatusBanner key="wallet" title={`Connecting ${MIDNIGHT_WALLET_HINT}…`} detail="Approve the request in your wallet." />}{deploymentBusy && <StatusBanner key="deploy" title={`Deploying to ${NETWORK_LABEL[selectedNetwork]}…`} detail="1AM is building and submitting the real contract transaction." />}{policyActionBusy && <StatusBanner key="policy" title="Finalizing policy action…" detail="1AM is proving and submitting the governed contract call." />}{walletError && <StatusBanner key="error" title="Wallet action needs attention" detail={walletError} error />}</AnimatePresence></div><div className="page-content"><AnimatePresence mode="wait"><motion.div key={activeNav} {...pageTransition}>{currentView}</motion.div></AnimatePresence></div><footer className="site-footer"><span>VeilPass · a Midnight privacy prototype</span><button type="button" onClick={() => setShowPrivacy(true)}>How privacy works →</button></footer></main>
     <AnimatePresence>{deploymentTransactionId && <motion.div className="deployment-receipt" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 12 }}><b>{NETWORK_LABEL[selectedNetwork]} finalized</b><span>Contract <code>{contractAddress}</code></span><span>Transaction <code>{deploymentTransactionId}</code></span></motion.div>}</AnimatePresence>
     <button className="assistant-launcher" type="button" onClick={() => setShowAssistant(true)}><span>✦</span><div><strong>Ask Veil</strong><small>Privacy guide</small></div></button>
     <AnimatePresence>{showAssistant && <motion.aside className="assistant-drawer" initial={reducedMotion ? undefined : { opacity: 0, x: 28 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 28 }} transition={{ duration: 0.24 }}><header><div><i>✦</i><span><strong>Veil copilot</strong><small>{chatMode === "gemini" ? "Context-aware · Gemini" : "Privacy-safe local mode"}</small></span></div><button className="close-button" type="button" onClick={() => setShowAssistant(false)}>×</button></header><div className="assistant-messages">{chatMessages.map((message, index) => <motion.p className={message.role} key={`${message.role}-${index}`} initial={reducedMotion ? undefined : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>{message.text}</motion.p>)}{chatBusy && <p className="assistant typing">Reasoning over minimized state…</p>}</div><div className="assistant-suggestions">{chatSuggestions.map((suggestion) => <button key={suggestion} type="button" onClick={() => setChatInput(suggestion)}>{suggestion}</button>)}</div><form onSubmit={sendChat}><input value={chatInput} onChange={(event) => setChatInput(event.target.value)} placeholder="Ask about your next safe action…" /><button type="submit" disabled={chatBusy}>→</button></form><small className="assistant-note">Only minimized UI state is sent. Never share a seed phrase or private witness.</small></motion.aside>}</AnimatePresence>
