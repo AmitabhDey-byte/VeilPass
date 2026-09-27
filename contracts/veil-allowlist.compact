@@ -1,24 +1,156 @@
-pragma language_version >= 0.23;
+pragma language_version 0.23;
 
 import CompactStandardLibrary;
 
-// VeilPass: private allowlist access.
-// The credential and its source stay in the caller's private state.
-// Only the commitment and the validity result are written publicly.
-witness private_credential_commitment(): Bytes<32>;
-witness private_is_eligible(): Boolean;
+// VeilPass: governed, replay-safe private allowlist access.
+//
+// Private membership data is verified against a public Merkle root. Successful
+// proofs publish only a policy-scoped nullifier and an unlinkable pass receipt.
 
-export ledger allowlist_root: Bytes<32>;
-export ledger verified_passes: Counter;
-
-export circuit register_allowlist_root(root: Bytes<32>): [] {
-  allowlist_root = disclose(root);
+export enum PolicyState {
+  ACTIVE,
+  PAUSED
 }
 
-export circuit prove_access(): [] {
-  const eligible = private_is_eligible();
-  assert(eligible, "Private eligibility proof failed");
-  const commitment = private_credential_commitment();
-  assert(commitment == allowlist_root, "Credential commitment is not on the allowlist");
+witness private_admin_secret(): Bytes<32>;
+witness private_credential_commitment(): Bytes<32>;
+witness private_membership_path(): MerkleTreePath<20, Bytes<32>>;
+witness private_nullifier_secret(): Bytes<32>;
+
+export ledger admin_key: Bytes<32>;
+export ledger allowlist_root: Field;
+export ledger policy_state: PolicyState;
+export ledger policy_epoch: Counter;
+export ledger max_passes: Uint<64>;
+export ledger valid_until: Uint<64>;
+export ledger verified_passes: Counter;
+export ledger used_nullifiers: Set<Bytes<32>>;
+export ledger issued_passes: Set<Bytes<32>>;
+export ledger revoked_passes: Set<Bytes<32>>;
+
+constructor(
+  initial_admin_secret: Bytes<32>,
+  initial_allowlist_root: Field,
+  initial_max_passes: Uint<64>,
+  initial_valid_until: Uint<64>
+) {
+  assert(initial_max_passes > 0, "Policy capacity must be greater than zero");
+  assert(initial_valid_until > 0, "Policy expiry must be configured");
+
+  admin_key = disclose(derive_admin_key(initial_admin_secret));
+  allowlist_root = disclose(initial_allowlist_root);
+  max_passes = disclose(initial_max_passes);
+  valid_until = disclose(initial_valid_until);
+  policy_state = PolicyState.ACTIVE;
+  policy_epoch.increment(1);
+}
+
+export pure circuit derive_admin_key(secret: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<2, Bytes<32>>>([
+    pad(32, "veilpass:admin:v1"),
+    secret
+  ]);
+}
+
+export pure circuit derive_nullifier(
+  root: Field,
+  epoch: Uint<64>,
+  secret: Bytes<32>
+): Bytes<32> {
+  return persistentHash<Vector<4, Bytes<32>>>([
+    pad(32, "veilpass:nullifier:v1"),
+    root as Bytes<32>,
+    epoch as Field as Bytes<32>,
+    secret
+  ]);
+}
+
+export pure circuit derive_pass_id(
+  root: Field,
+  epoch: Uint<64>,
+  nullifier: Bytes<32>
+): Bytes<32> {
+  return persistentHash<Vector<4, Bytes<32>>>([
+    pad(32, "veilpass:pass:v1"),
+    root as Bytes<32>,
+    epoch as Field as Bytes<32>,
+    nullifier
+  ]);
+}
+
+circuit assert_admin(): [] {
+  const supplied_key = derive_admin_key(private_admin_secret());
+  assert(supplied_key == admin_key, "Administrator authentication failed");
+}
+
+export circuit rotate_policy(
+  new_allowlist_root: Field,
+  new_max_passes: Uint<64>,
+  new_valid_until: Uint<64>
+): [] {
+  assert_admin();
+  assert(new_max_passes > 0, "Policy capacity must be greater than zero");
+  assert(new_valid_until > 0, "Policy expiry must be configured");
+
+  allowlist_root = disclose(new_allowlist_root);
+  max_passes = disclose(new_max_passes);
+  valid_until = disclose(new_valid_until);
+  policy_state = PolicyState.ACTIVE;
+  policy_epoch.increment(1);
+  verified_passes.resetToDefault();
+}
+
+export circuit pause_policy(): [] {
+  assert_admin();
+  assert(policy_state == PolicyState.ACTIVE, "Policy is not active");
+  policy_state = PolicyState.PAUSED;
+}
+
+export circuit resume_policy(): [] {
+  assert_admin();
+  assert(policy_state == PolicyState.PAUSED, "Policy is not paused");
+  policy_state = PolicyState.ACTIVE;
+}
+
+export circuit transfer_admin(new_admin_secret: Bytes<32>): [] {
+  assert_admin();
+  admin_key = disclose(derive_admin_key(new_admin_secret));
+}
+
+export circuit prove_access(): Bytes<32> {
+  assert(policy_state == PolicyState.ACTIVE, "Policy is paused");
+  assert(kernel.blockTimeLessThan(valid_until), "Policy has expired");
+  assert(verified_passes.lessThan(max_passes), "Policy capacity has been reached");
+
+  const credential = private_credential_commitment();
+  const membership_path = private_membership_path();
+  assert(credential == membership_path.leaf, "Credential does not match the membership path");
+
+  const reconstructed_root = merkleTreePathRoot<20, Bytes<32>>(membership_path);
+  assert(disclose(reconstructed_root.field) == allowlist_root, "Credential is not in the active allowlist");
+
+  const nullifier = derive_nullifier(allowlist_root, policy_epoch.read(), private_nullifier_secret());
+  assert(!used_nullifiers.member(disclose(nullifier)), "This credential proof has already been consumed");
+
+  const pass_id = derive_pass_id(allowlist_root, policy_epoch.read(), nullifier);
+  used_nullifiers.insert(disclose(nullifier));
+  issued_passes.insert(disclose(pass_id));
   verified_passes.increment(1);
+
+  return disclose(pass_id);
+}
+
+export circuit revoke_pass(pass_id: Bytes<32>): [] {
+  assert_admin();
+  assert(issued_passes.member(disclose(pass_id)), "Pass was never issued");
+  assert(!revoked_passes.member(disclose(pass_id)), "Pass is already revoked");
+  revoked_passes.insert(disclose(pass_id));
+}
+
+export circuit validate_pass(pass_id: Bytes<32>): Boolean {
+  const issued = issued_passes.member(disclose(pass_id));
+  const revoked = revoked_passes.member(disclose(pass_id));
+  const active = policy_state == PolicyState.ACTIVE;
+  const unexpired = kernel.blockTimeLessThan(valid_until);
+  return disclose(issued && !revoked && active && unexpired);
 }
