@@ -6,6 +6,7 @@ import type { FormEvent, ReactNode } from "react";
 import type { ConnectedAPI, InitialAPI } from "@midnight-ntwrk/dapp-connector-api";
 import { PrivacyIntelligence } from "@/app/components/privacy-intelligence";
 import type { PolicyBlueprint } from "@/lib/ai/types";
+import type { VeilPassDeployment } from "@/lib/midnight-browser-deploy";
 
 type Network = "preview" | "preprod";
 type View = "Overview" | "Passport" | "Access passes" | "Privacy intelligence" | "Credentials" | "Activity" | "Network health" | "Host console";
@@ -23,7 +24,6 @@ const NETWORK_FAUCET: Record<Network, string> = {
 const DEFAULT_MIDNIGHT_NETWORK_ID = process.env.NEXT_PUBLIC_MIDNIGHT_NETWORK_ID || "preprod";
 const MIDNIGHT_WALLET_HINT = process.env.NEXT_PUBLIC_MIDNIGHT_WALLET || "1AM";
 const GENERIC_CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_MIDNIGHT_CONTRACT_ADDRESS || "";
-const DEFAULT_ALLOWLIST_ROOT = "0".repeat(64);
 
 const navItems: Array<{ label: View; icon: string; group: "workspace" | "vault" }> = [
   { label: "Overview", icon: "◒", group: "workspace" },
@@ -115,13 +115,15 @@ export default function Home() {
   const [allowlistRegistrationBusy, setAllowlistRegistrationBusy] = useState(false);
   const [allowlistRoot, setAllowlistRoot] = useState("");
   const [allowlistName, setAllowlistName] = useState("Founders Circle · Cohort 04");
+  const [issuedPassId, setIssuedPassId] = useState("");
   const [passStates, setPassStates] = useState<Record<string, PassState>>({ founders: "Ready to prove", research: "Ready to prove", builder: "Ready to prove", beta: "Pending" });
   const [passBusyId, setPassBusyId] = useState<string | null>(null);
   const [activePass, setActivePass] = useState<typeof PASS_DEFINITIONS[number] | null>(null);
   const [userCredentials, setUserCredentials] = useState<typeof CREDENTIAL_LIBRARY>([CREDENTIAL_LIBRARY[0]]);
   const [showCredentialImport, setShowCredentialImport] = useState(false);
-  const deployedProofRef = useRef<(() => Promise<void>) | null>(null);
+  const deployedProofRef = useRef<(() => Promise<string>) | null>(null);
   const registerAllowlistRef = useRef<((root: string) => Promise<void>) | null>(null);
+  const policyControlsRef = useRef<Pick<VeilPassDeployment, "rotateToFreshPolicy" | "pausePolicy" | "resumePolicy" | "revokePass" | "validatePass"> | null>(null);
   const [verified, setVerified] = useState(false);
   const [showProof, setShowProof] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
@@ -165,7 +167,7 @@ export default function Home() {
 
   async function connectWallet(networkId: Network = selectedNetwork, forceConnect = false): Promise<ConnectedAPI | null> {
     if (connected && !forceConnect) {
-      setWalletApi(null); deployedProofRef.current = null; registerAllowlistRef.current = null;
+      setWalletApi(null); deployedProofRef.current = null; registerAllowlistRef.current = null; policyControlsRef.current = null;
       setWalletAddress(""); setWalletName(""); setWalletNetwork(""); setWalletError(""); setConnected(false);
       pushNotice("Wallet disconnected");
       return null;
@@ -198,7 +200,7 @@ export default function Home() {
     if (!deployedProofRef.current) { pushNotice(`Deploy VeilPass in this ${NETWORK_LABEL[selectedNetwork]} browser session before submitting a live access proof.`); return; }
     setProofBusy(true); setWalletError("");
     try {
-      await deployedProofRef.current(); setVerified(true); setShowProof(false);
+      const passId = await deployedProofRef.current(); setIssuedPassId(passId); setVerified(true); setShowProof(false);
       const pass = activePass ?? PASS_DEFINITIONS[0];
       setPassStates((states) => ({ ...states, [pass.id]: "Verified" }));
       recordActivity({ commitment: pass.commitment, type: "Eligibility proof", state: "Verified" });
@@ -227,14 +229,13 @@ export default function Home() {
       const deployment = await deployVeilPass(api, network);
       deployedProofRef.current = deployment.proveAccess;
       registerAllowlistRef.current = deployment.registerAllowlist;
+      policyControlsRef.current = deployment;
       setContractAddresses((current) => ({ ...current, [network]: deployment.contractAddress }));
       setDeploymentTransactionIds((current) => ({ ...current, [network]: deployment.transactionId }));
-      setAllowlistRoot(DEFAULT_ALLOWLIST_ROOT);
-      pushNotice(`Contract finalized on ${NETWORK_LABEL[network]}. Initializing its allowlist…`);
-      await deployment.initializeDefaultAllowlist();
+      setAllowlistRoot(deployment.policyRoot);
       await navigator.clipboard?.writeText(deployment.contractAddress);
       recordActivity({ commitment: `${deployment.contractAddress.slice(0, 8)}…${deployment.contractAddress.slice(-4)}`, type: "Allowlist registration", state: "Verified" });
-      pushNotice(`${NETWORK_LABEL[network]} contract and default allowlist finalized. Full address copied.`);
+      pushNotice(`${NETWORK_LABEL[network]} contract and governed policy finalized. Full address copied.`);
     } catch (error) {
       const { describeMidnightDeploymentError } = await import("@/lib/midnight-browser-deploy");
       setWalletError(describeMidnightDeploymentError(error, network)); pushNotice(`${NETWORK_LABEL[network]} deployment failed`);
@@ -258,8 +259,8 @@ export default function Home() {
 
   function switchNetwork(network: Network) {
     if (network === selectedNetwork) return;
-    setSelectedNetwork(network); setWalletApi(null); deployedProofRef.current = null; registerAllowlistRef.current = null;
-    setWalletAddress(""); setWalletName(""); setWalletNetwork(""); setWalletError(""); setConnected(false); setVerified(false);
+    setSelectedNetwork(network); setWalletApi(null); deployedProofRef.current = null; registerAllowlistRef.current = null; policyControlsRef.current = null;
+    setWalletAddress(""); setWalletName(""); setWalletNetwork(""); setWalletError(""); setConnected(false); setVerified(false); setIssuedPassId("");
     pushNotice(`Switched to ${NETWORK_LABEL[network]}. Reconnect 1AM to continue.`);
   }
   function openView(view: View) { setActiveNav(view); window.scrollTo({ top: 0, behavior: "smooth" }); }
@@ -298,7 +299,7 @@ export default function Home() {
 
   const passportView = <section className="view-page"><PageIntro eyebrow="Member passport" title={<>Your privacy journey,<br /><em>made legible.</em></>}>A member-facing guide to the only steps that matter. Your witness remains local throughout.</PageIntro><div className="journey-grid">{[["01", "Connect 1AM", connected ? "Connected to the right wallet." : "Bring your 1AM wallet to the selected network.", connected], ["02", "Choose a credential", `${userCredentials.length} private witness${userCredentials.length === 1 ? "" : "es"} in your vault.`, userCredentials.length > 0], ["03", "Run a private proof", "The circuit evaluates your claim without exposing its source.", verified], ["04", "Enter with confidence", "Only the validity result is visible to an observer.", verified]].map(([step, title, copy, complete]) => <motion.article className={`journey-card ${complete ? "complete" : ""}`} key={String(step)} initial={reducedMotion ? undefined : { opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Number(String(step)) * 0.05 }}><span>{step}</span><h2>{title}</h2><p>{copy}</p><b>{complete ? "Complete" : "Next"}</b></motion.article>)}</div><div className="wide-info-panel"><div className="info-icon">⌑</div><div><span className="section-kicker">Your boundary</span><h2>A proof is not a profile.</h2><p>Names, credential sources, scores, and membership evidence remain in your control. VeilPass discloses the smallest possible answer.</p></div><button className="secondary-button" type="button" onClick={() => setShowPrivacy(true)}>See privacy model →</button></div></section>;
 
-  const passesView = <section className="view-page"><PageIntro eyebrow="Private rooms" title={<>Choose where to<br /><em>belong next.</em></>}>Each room asks for a different private claim. The public ledger never receives your identity or the source credential.</PageIntro><div className="pass-grid">{PASS_DEFINITIONS.map((pass) => <motion.article className={`pass-card ${pass.accent} ${passStates[pass.id].toLowerCase().replaceAll(" ", "-")}`} key={pass.id} whileHover={reducedMotion ? undefined : { y: -5 }}><div className="pass-card-top"><span>{pass.type}</span><b>{passStates[pass.id]}</b></div><h2>{pass.name}</h2><p>{pass.detail}</p><ul>{pass.requirements.map((item) => <li key={item}>✓ {item}</li>)}</ul><div className="pass-card-footer"><span>{pass.members} members</span><button className="text-button" type="button" disabled={passBusyId === pass.id} onClick={() => runPassFlow(pass)}>{passBusyId === pass.id ? "Preparing…" : "Request access →"}</button></div></motion.article>)}</div></section>;
+  const passesView = <section className="view-page"><PageIntro eyebrow="Private rooms" title={<>Choose where to<br /><em>belong next.</em></>}>Each room asks for a different private claim. The public ledger never receives your identity or the source credential.</PageIntro>{issuedPassId && <div className="pass-receipt"><span>Latest on-chain pass receipt</span><code>{issuedPassId}</code></div>}<div className="pass-grid">{PASS_DEFINITIONS.map((pass) => <motion.article className={`pass-card ${pass.accent} ${passStates[pass.id].toLowerCase().replaceAll(" ", "-")}`} key={pass.id} whileHover={reducedMotion ? undefined : { y: -5 }}><div className="pass-card-top"><span>{pass.type}</span><b>{passStates[pass.id]}</b></div><h2>{pass.name}</h2><p>{pass.detail}</p><ul>{pass.requirements.map((item) => <li key={item}>✓ {item}</li>)}</ul><div className="pass-card-footer"><span>{pass.members} members</span><button className="text-button" type="button" disabled={passBusyId === pass.id} onClick={() => runPassFlow(pass)}>{passBusyId === pass.id ? "Preparing…" : "Request access →"}</button></div></motion.article>)}</div></section>;
 
   const credentialsView = <section className="view-page"><PageIntro eyebrow="Private witness vault" title={<>Only you hold<br /><em>the evidence.</em></>}>Credentials are represented locally in this prototype. They are never posted to a server or copied into the public ledger.</PageIntro><div className="vault-banner"><div>⌑</div><p><strong>Local-first by design</strong><span>Your witness lives with the wallet that owns it.</span></p><b><i />Shielded</b></div><div className="credential-list">{userCredentials.map((credential) => <article className="credential-card" key={credential.name}><div>{credential.icon}</div><section><h2>{credential.name} <b>Private</b></h2><p>Issued by <strong>{credential.issuer}</strong></p><span>{credential.description}</span></section><button className="text-button" type="button" onClick={() => { setActivePass(PASS_DEFINITIONS[0]); setShowProof(true); }}>Use →</button></article>)}</div><button className="secondary-button add-credential" type="button" onClick={() => setShowCredentialImport(true)}>Add a private witness +</button></section>;
 
